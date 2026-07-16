@@ -5,7 +5,127 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --bg-primary: #FAFAFA;
+    --bg-secondary: #FFFFFF;
+    --surface: #FFFFFF;
+    --border: #F3F4F6;
+    --border-hover: #E5E7EB;
+    
+    --text-primary: #111111;
+    --text-secondary: #6B7280;
+    
+    --ring-focus: #BDBDBD;
+  }
+
   body {
-    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+    @apply bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans antialiased;
+  }
+
+  /* Typography System */
+  h1, .page-title { @apply text-[32px] font-[700] text-[var(--text-primary)] tracking-tight leading-tight; }
+  h2, .section-title { @apply text-[22px] font-[600] text-[var(--text-primary)] tracking-tight leading-snug; }
+  h3, .card-title { @apply text-[18px] font-[600] text-[var(--text-primary)] tracking-tight; }
+  p, .body-text { @apply text-[15px] font-[400] text-[var(--text-primary)] leading-relaxed; }
+  .caption-text { @apply text-[13px] font-[500] text-[var(--text-secondary)]; }
+}
+
+@layer components {
+  /* Empty States */
+  .empty-state {
+    @apply flex flex-col items-center justify-center p-12 text-center rounded-[14px] border border-dashed border-[#E5E7EB] bg-[#FAFAFA];
+  }
+  .empty-state-icon {
+    @apply text-[32px] mb-4 opacity-70;
+  }
+  .empty-state-title {
+    @apply text-[15px] font-[600] text-[#111111] mb-2;
+  }
+  .empty-state-desc {
+    @apply text-[14px] text-[#6B7280] max-w-[300px] mx-auto mb-6;
+  }
+  /* Tables */
+  .linear-table {
+    @apply w-full text-left bg-[#FFFFFF] rounded-[14px];
+  }
+  .linear-table th {
+    @apply h-[60px] px-[24px] font-[600] text-[#6B7280] text-[13px] uppercase tracking-wider border-b border-[#F5F5F5] sticky top-0 bg-[#FFFFFF] z-10;
+  }
+  .linear-table td {
+    @apply h-[60px] px-[24px] border-b border-[#F5F5F5] text-[15px] text-[#111111];
+  }
+  .linear-table tr:hover td {
+    @apply bg-[#F9FAFB];
+  }
+  .linear-table-container {
+    @apply bg-[#FFFFFF] rounded-[14px] border border-[#F3F4F6] overflow-hidden;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 8px 24px rgba(15,23,42,0.04);
+  }
+  /* Cards */
+  .linear-card {
+    @apply bg-[var(--surface)] border border-[var(--border)] rounded-[14px] p-[24px];
+    box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 8px 24px rgba(15,23,42,0.04);
+    transition: all 180ms ease;
+  }
+  .linear-card:hover {
+    @apply border-[var(--border-hover)];
+    box-shadow: 0 4px 12px rgba(15,23,42,0.05), 0 12px 30px rgba(15,23,42,0.06);
+  }
+
+  /* Inputs */
+  .linear-input {
+    @apply bg-[#FFFFFF] border border-[#E5E7EB] rounded-[10px] text-[#111111] px-[16px] h-[44px] outline-none text-[15px] w-full;
+    transition: border-color 180ms ease;
+  }
+  .linear-input:focus {
+    @apply border-[#BDBDBD];
+    box-shadow: none;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply flex items-center justify-center gap-2 bg-[#111111] text-[#FFFFFF] font-[500] text-[15px] px-[16px] h-[44px] rounded-[10px] border border-[#111111];
+    transition: background-color 180ms ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-[#2A2A2A];
+  }
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#111111] font-[500] text-[15px] px-[16px] h-[44px] rounded-[10px] border border-[#E5E7EB];
+    transition: background-color 180ms ease;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-[#F9FAFB];
+  }
+  .btn-secondary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-danger {
+    @apply flex items-center justify-center gap-2 bg-[#FFFFFF] text-[#EF4444] font-[500] text-[15px] px-[16px] h-[44px] rounded-[10px] border border-[#E5E7EB];
+    transition: background-color 180ms ease;
+  }
+  .btn-danger:hover:not(:disabled) {
+    @apply bg-[#FEF2F2] border-[#FCA5A5];
+  }
+
+  /* Badges */
+  .badge-completed, .badge-approved {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-[13px] font-[500] bg-[#ECFDF5] text-[#047857];
+  }
+  .badge-progress {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-[13px] font-[500] bg-[#FEF3C7] text-[#92400E];
+  }
+  .badge-pending {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-[13px] font-[500] bg-[#F3F4F6] text-[#6B7280];
+  }
+  .badge-rejected, .badge-danger {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-[13px] font-[500] bg-[#FEF2F2] text-[#B91C1C];
   }
 }
+
+

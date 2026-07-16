@@ -1,336 +1,573 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppContext, supabase } from '../context/AppContext';
-import { Gift, Calendar, CheckCircle2, AlertCircle, Users, Lock, Unlock, TrendingUp, Medal, Trophy, Crown, ArrowRight } from 'lucide-react';
+import { Gift, Calendar, CheckCircle2, AlertCircle, Users, Lock, Unlock, Trophy, Crown, Clock, Milestone, Target, Info, Check } from 'lucide-react';
 
 export default function EmployeeRewards() {
-  const { currentUser, teamRewards, rewardClaims, rewardSettings, employees, tasks, projects, fetchGlobalData } = useAppContext();
-  
-  const [activeTab, setActiveTab] = useState('current'); // current, premium, history
-  const [showClaimModal, setShowClaimModal] = useState(false);
-  const [unlockedClaims, setUnlockedClaims] = useState([]);
+ const { currentUser, teamRewards, rewardClaims, rewardSettings, employees, tasks, projects, projectTeams, rewardSubmissions, fetchGlobalData } = useAppContext();
+ 
+ const [activeTab, setActiveTab] = useState('current'); // current, upcoming, history
+ 
+ // 1. PROJECT SCOPING: Find projects/teams the employee is part of
+ const myTeams = useMemo(() => {
+ if (!currentUser) return [];
+ return projectTeams.filter(t => 
+ t.team_leader_id === currentUser.id || 
+ (t.team_members && t.team_members.includes(currentUser.id))
+ );
+ }, [currentUser, projectTeams]);
 
-  // Check for multiple unlocked claims if allow_multiple_claims is false
-  useEffect(() => {
-    if (!currentUser) return;
-    const myUnlocked = rewardClaims.filter(c => c.employee_id === currentUser.id && c.status === 'Unlocked');
-    setUnlockedClaims(myUnlocked);
-    
-    if (myUnlocked.length > 1 && !rewardSettings?.allow_multiple_claims) {
-      setShowClaimModal(true);
-    } else {
-      setShowClaimModal(false);
-    }
-  }, [rewardClaims, currentUser, rewardSettings]);
+ // 2. REWARD VISIBILITY: Filter rewards mapped to my teams
+ const myEligibleRewards = useMemo(() => {
+ if (myTeams.length === 0) return [];
+ 
+ // A reward is visible if it matches one of the employee's project_ids and team_names
+ return teamRewards.filter(reward => {
+ return myTeams.some(t => t.project_id === reward.project_id && t.team_name === reward.team_name);
+ });
+ }, [teamRewards, myTeams]);
 
-  if (!currentUser) return null;
+ // Split rewards into categories
+ const currentRewards = myEligibleRewards.filter(r => {
+ const now = new Date();
+ const start = new Date(r.start_date || r.created_at);
+ return start <= now && r.status !== 'Expired' && r.status !== 'Cancelled';
+ });
 
-  const handleClaim = async (claimId) => {
-    try {
-      if (!rewardSettings?.allow_multiple_claims && unlockedClaims.length > 1) {
-        // Claim the selected one, mark others as Not Claimed
-        const otherClaims = unlockedClaims.filter(c => c.id !== claimId).map(c => c.id);
-        
-        await supabase.from('reward_claims').update({ status: 'Claimed', claimed_at: new Date().toISOString() }).eq('id', claimId);
-        if (otherClaims.length > 0) {
-          await supabase.from('reward_claims').update({ status: 'Not Claimed' }).in('id', otherClaims);
-        }
-      } else {
-        // Just claim this one
-        await supabase.from('reward_claims').update({ status: 'Claimed', claimed_at: new Date().toISOString() }).eq('id', claimId);
-      }
-      setShowClaimModal(false);
-      fetchGlobalData();
-    } catch (err) {
-      console.error('Error claiming reward:', err);
-    }
-  };
+ const upcomingRewards = myEligibleRewards.filter(r => {
+ const now = new Date();
+ const start = new Date(r.start_date || r.created_at);
+ return start > now && r.status !== 'Cancelled';
+ });
 
-  // Helper to get team progress
-  const getTeamProgress = (teamName, projectId) => {
-    const teamMembers = employees.filter(e => e.team === teamName);
-    if (teamMembers.length === 0) return { completed: [], pending: [], percentage: 0 };
-    
-    const memberIds = teamMembers.map(m => m.id);
-    let teamTasks = tasks.filter(t => memberIds.includes(t.employee_id));
-    if (projectId) {
-      teamTasks = teamTasks.filter(t => t.project_id === projectId);
-    }
-    
-    let completedMembers = [];
-    let pendingMembers = [];
+ const historyRewards = myEligibleRewards.filter(r => {
+ return r.status === 'Expired' || r.status === 'Cancelled' || rewardClaims.some(c => c.reward_id === r.id && c.employee_id === currentUser.id && c.status === 'Claimed');
+ });
 
-    teamMembers.forEach(emp => {
-      const empTasks = teamTasks.filter(t => t.employee_id === emp.id);
-      if (empTasks.length === 0) {
-        pendingMembers.push({ ...emp, remainingTasks: 0, status: 'No Tasks' });
-        return;
-      }
-      const isCompleted = empTasks.every(t => t.status === 'Completed' && t.approval_status === 'Approved');
-      if (isCompleted) {
-        completedMembers.push({ ...emp, taskCount: empTasks.length });
-      } else {
-        const remaining = empTasks.filter(t => t.status !== 'Completed' || t.approval_status !== 'Approved');
-        pendingMembers.push({ ...emp, remainingTasks: remaining.length, status: remaining[0]?.status || 'Pending' });
-      }
-    });
+ // Default to the first current reward
+ const [selectedRewardId, setSelectedRewardId] = useState(null);
+ 
+ useEffect(() => {
+ if (currentRewards.length > 0 && !selectedRewardId) {
+ setSelectedRewardId(currentRewards[0].id);
+ }
+ }, [currentRewards, selectedRewardId]);
 
-    const percentage = teamMembers.length === 0 ? 0 : Math.round((completedMembers.length / teamMembers.length) * 100);
-    return { completed: completedMembers, pending: pendingMembers, percentage, totalMembers: teamMembers.length };
-  };
+ const activeReward = currentRewards.find(r => r.id === selectedRewardId) || currentRewards[0];
 
-  const myTeamRewards = teamRewards.filter(r => r.team_name === currentUser.team);
-  
-  // Filter for tabs
-  const currentRewards = myTeamRewards.filter(r => r.reward_type !== 'Premium' && r.status !== 'Expired' && r.status !== 'Cancelled');
-  const premiumRewards = myTeamRewards.filter(r => r.reward_type === 'Premium' && r.status !== 'Expired' && r.status !== 'Cancelled');
-  
-  const myClaims = rewardClaims.filter(c => c.employee_id === currentUser.id);
-  const claimHistory = myClaims.filter(c => c.status === 'Claimed' || c.status === 'Not Claimed' || c.status === 'Expired');
+ // Helper to get Team Progress (Dynamic)
+ const getTeamProgressData = (reward) => {
+ if (!reward) return null;
+ 
+ // Find the actual team
+ const team = myTeams.find(t => t.project_id === reward.project_id && t.team_name === reward.team_name);
+ if (!team) return null;
 
-  return (
-    <div className="max-w-7xl mx-auto pb-24 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      
-      {/* Choose Your Reward Modal */}
-      {showClaimModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-8 shadow-2xl animate-in zoom-in duration-300">
-            <div className="text-center mb-8">
-              <Trophy className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-              <h2 className="text-3xl font-extrabold text-slate-900">Congratulations!</h2>
-              <p className="text-slate-600 mt-2 text-lg">You qualified for multiple team rewards.<br/>Please select <strong className="text-brand-600">only one</strong> reward before the claim deadline.</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {unlockedClaims.map(claim => {
-                const reward = teamRewards.find(r => r.id === claim.reward_id);
-                if (!reward) return null;
-                const projName = projects.find(p => p.id === reward.project_id)?.name || 'General';
-                return (
-                  <div key={claim.id} className="border-2 border-slate-200 rounded-2xl p-6 hover:border-brand-500 cursor-pointer transition-all flex flex-col group" onClick={() => handleClaim(claim.id)}>
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded uppercase">{projName}</span>
-                      {reward.reward_type === 'Premium' && <span className="text-xs font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded flex items-center gap-1"><Crown className="w-3 h-3"/> Premium</span>}
-                    </div>
-                    {reward.image_url ? (
-                      <img src={reward.image_url} alt="Reward" className="w-full h-32 object-cover rounded-xl mb-4" />
-                    ) : (
-                      <div className="w-full h-32 bg-brand-50 rounded-xl flex items-center justify-center mb-4 text-brand-300">
-                        <Gift className="w-12 h-12" />
-                      </div>
-                    )}
-                    <h3 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-brand-600">{reward.title}</h3>
-                    <p className="text-sm text-slate-500 flex-1">{reward.description}</p>
-                    <button className="mt-4 w-full py-2 bg-brand-50 text-brand-700 font-bold rounded-xl group-hover:bg-brand-600 group-hover:text-white transition-colors">
-                      Claim This Reward
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+ // Get all members
+ const memberIds = new Set();
+ if (team.team_leader_id) memberIds.add(team.team_leader_id);
+ if (team.team_members) team.team_members.forEach(id => memberIds.add(id));
+ 
+ const teamEmployees = employees.filter(e => memberIds.has(e.id));
+ 
+ // Get all tasks for this project
+ const projectTasks = tasks.filter(t => t.project_id === reward.project_id);
 
-      {/* Header */}
-      <div className="bg-slate-900 rounded-2xl p-8 mb-8 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 opacity-10">
-          <Gift className="w-64 h-64" />
-        </div>
-        <div className="flex items-center gap-6 relative z-10">
-          <div className="w-16 h-16 bg-gradient-to-br from-brand-400 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
-            <Gift className="w-8 h-8 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight mb-2">Team Weekend Rewards</h1>
-            <p className="text-slate-300 max-w-xl">Complete all weekly tasks as a team to unlock exciting rewards together!</p>
-          </div>
-        </div>
-      </div>
+ let completedMembers = [];
+ let pendingMembers = [];
 
-      <div className="flex gap-4 border-b border-slate-200 mb-8">
-        <button onClick={() => setActiveTab('current')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'current' ? 'border-brand-600 text-brand-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          Current Rewards
-        </button>
-        <button onClick={() => setActiveTab('premium')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'premium' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          Premium Rewards
-        </button>
-        <button onClick={() => setActiveTab('history')} className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'history' ? 'border-slate-800 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-          Reward History
-        </button>
-      </div>
+ teamEmployees.forEach(emp => {
+ const empTasks = projectTasks.filter(t => t.employee_id === emp.id);
+ 
+ // If employee has no tasks assigned yet, they are pending assignment, not completed.
+ if (empTasks.length === 0) {
+ pendingMembers.push({ ...emp, remainingTasks: 0, status: 'No Tasks' });
+ return;
+ }
+ 
+ const isCompleted = empTasks.every(t => t.status === 'Completed' || t.status === 'Approved');
+ 
+ if (isCompleted) {
+ completedMembers.push({ ...emp, taskCount: empTasks.length });
+ } else {
+ const remaining = empTasks.filter(t => t.status !== 'Completed' && t.status !== 'Approved');
+ pendingMembers.push({ ...emp, remainingTasks: remaining.length, status: remaining[0]?.status || 'Pending' });
+ }
+ });
 
-      {activeTab === 'history' ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date Earned</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Reward</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {claimHistory.length === 0 ? (
-                <tr><td colSpan="4" className="p-8 text-center text-slate-500 italic">No reward history yet.</td></tr>
-              ) : (
-                claimHistory.map(claim => {
-                  const reward = teamRewards.find(r => r.id === claim.reward_id);
-                  return (
-                    <tr key={claim.id} className="hover:bg-slate-50">
-                      <td className="p-4 text-sm text-slate-600 font-medium">{new Date(claim.earned_at).toLocaleDateString()}</td>
-                      <td className="p-4 text-sm font-bold text-slate-900">{reward?.title || 'Unknown Reward'}</td>
-                      <td className="p-4 text-sm text-slate-600">{projects.find(p => p.id === reward?.project_id)?.name || 'General'}</td>
-                      <td className="p-4">
-                        <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${claim.status === 'Claimed' ? 'bg-emerald-100 text-emerald-700' : claim.status === 'Not Claimed' ? 'bg-slate-100 text-slate-500' : 'bg-red-100 text-red-700'}`}>
-                          {claim.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {(activeTab === 'current' ? currentRewards : premiumRewards).length === 0 ? (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm text-center">
-              <Trophy className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-slate-900">No {activeTab} rewards scheduled</h3>
-              <p className="text-slate-500 mt-2">Check back later or view your history.</p>
-            </div>
-          ) : (
-            (activeTab === 'current' ? currentRewards : premiumRewards).map(reward => {
-              const progress = getTeamProgress(reward.team_name, reward.project_id);
-              const myClaim = rewardClaims.find(c => c.reward_id === reward.id && c.employee_id === currentUser.id);
-              const isUnlocked = myClaim?.status === 'Unlocked' || reward.status === 'Unlocked';
-              const isClaimed = myClaim?.status === 'Claimed';
-              const projName = projects.find(p => p.id === reward.project_id)?.name || 'General';
+ const percentage = teamEmployees.length === 0 ? 0 : Math.round((completedMembers.length / teamEmployees.length) * 100);
+ 
+ // MY Contribution
+ const myTasks = projectTasks.filter(t => t.employee_id === currentUser.id);
+ const myCompleted = myTasks.filter(t => t.status === 'Completed' || t.status === 'Approved').length;
+ const myProgress = myTasks.length > 0 ? Math.round((myCompleted / myTasks.length) * 100) : 0;
 
-              return (
-                <div key={reward.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:flex-row">
-                  {/* Visual Left Side */}
-                  <div className={`w-full lg:w-1/3 p-8 flex flex-col justify-center ${isClaimed ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white' : isUnlocked ? 'bg-gradient-to-br from-brand-500 to-indigo-600 text-white' : 'bg-slate-50 border-r border-slate-100'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <span className={`text-xs font-bold px-3 py-1 rounded uppercase ${isUnlocked || isClaimed ? 'bg-white/20 text-white' : 'bg-brand-100 text-brand-700'}`}>
-                        {projName}
-                      </span>
-                      {reward.reward_type === 'Premium' && (
-                        <span className={`text-xs font-bold px-3 py-1 rounded flex items-center gap-1 uppercase ${isUnlocked || isClaimed ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
-                          <Crown className="w-3 h-3"/> Premium
-                        </span>
-                      )}
-                    </div>
-                    
-                    {reward.image_url ? (
-                      <img src={reward.image_url} alt="Reward" className="w-full h-48 object-cover rounded-xl mb-6 shadow-md" />
-                    ) : (
-                      <div className="text-6xl mb-6 text-center">🎁</div>
-                    )}
-                    
-                    <h3 className={`text-3xl font-extrabold mb-2 ${isUnlocked || isClaimed ? 'text-white' : 'text-slate-900'}`}>{reward.title}</h3>
-                    <p className={`text-sm mb-6 ${isUnlocked || isClaimed ? 'text-white/80' : 'text-slate-500'}`}>{reward.description}</p>
-                    
-                    {isClaimed ? (
-                      <div className="bg-white/20 rounded-xl p-4 text-center">
-                        <CheckCircle2 className="w-8 h-8 text-white mx-auto mb-2" />
-                        <span className="font-bold">Reward Claimed!</span>
-                      </div>
-                    ) : isUnlocked ? (
-                      <button onClick={() => handleClaim(myClaim?.id)} className="w-full py-3 bg-white text-brand-600 font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-lg">
-                        Claim Reward Now
-                      </button>
-                    ) : (
-                      <div className="bg-white p-4 rounded-xl shadow-sm text-center">
-                        <div className="text-3xl font-extrabold text-brand-600 mb-1">{progress.percentage}%</div>
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Team Completion</div>
-                      </div>
-                    )}
-                  </div>
+ return { completedMembers, pendingMembers, percentage, totalMembers: teamEmployees.length, myTasks, myCompleted, myProgress };
+ };
 
-                  {/* Tracking Right Side */}
-                  <div className="w-full lg:w-2/3 p-8 flex flex-col">
-                    
-                    {/* Rules */}
-                    {reward.rules && reward.rules.length > 0 && (
-                      <div className="mb-6 bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3">
-                        <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
-                        <div>
-                          <h4 className="text-sm font-bold text-amber-900 mb-1">Premium Eligibility Rules</h4>
-                          <ul className="list-disc list-inside text-xs text-amber-700">
-                            {reward.rules.map((rule, idx) => <li key={idx}>{rule}</li>)}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
+ const activeData = getTeamProgressData(activeReward);
 
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-bold text-slate-900 flex items-center gap-2"><Target className="w-5 h-5 text-brand-600" /> Team Progress Tracker</h4>
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-slate-500">Deadline: {new Date(reward.claim_deadline).toLocaleString()}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden mb-6">
-                      <div className={`h-full transition-all duration-1000 ${isUnlocked || isClaimed ? 'bg-emerald-500' : 'bg-brand-500'}`} style={{ width: `${progress.percentage}%` }}></div>
-                    </div>
+ // Auto-Unlock Logic (Manager usually unlocks, but if dynamic progress is 100%, we treat it as unlocked visually)
+ useEffect(() => {
+ const checkUnlock = async () => {
+ if (activeReward && activeReward.status !== 'Unlocked' && activeData && activeData.percentage === 100) {
+ // Theoretically, if the team hits 100%, we should update the DB if it hasn't been done.
+ // We will do a silent update here to maintain the hybrid timeline integrity
+ try {
+ await supabase.from('team_rewards').update({ 
+ status: 'Unlocked', 
+ unlocked_at: new Date().toISOString() 
+ }).eq('id', activeReward.id);
+ fetchGlobalData();
+ } catch (e) { console.error('Unlock error', e); }
+ }
+ };
+ checkUnlock();
+ }, [activeReward, activeData, fetchGlobalData]);
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
-                      {/* Pending Members */}
-                      <div className="border border-slate-200 bg-slate-50 rounded-xl p-4 flex flex-col max-h-64 overflow-y-auto">
-                        <h4 className="font-bold text-slate-900 mb-4 flex items-center justify-between sticky top-0 bg-slate-50 pb-2 border-b">
-                          <span className="flex items-center gap-2"><Users className="w-4 h-4 text-slate-500" /> Pending Members</span>
-                          <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded">{progress.pending.length}</span>
-                        </h4>
-                        {progress.pending.length === 0 ? <p className="text-sm text-slate-500 italic mt-4 text-center">Everyone has completed their tasks!</p> : (
-                          <div className="space-y-3 mt-2">
-                            {progress.pending.map(m => (
-                              <div key={m.id} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
-                                <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs">{m.name.charAt(0)}</div>
-                                <div className="flex-1">
-                                  <p className="text-sm font-bold text-slate-900">{m.name}</p>
-                                  <div className="flex justify-between items-center mt-1">
-                                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold uppercase">{m.remainingTasks} Left</span>
-                                    <span className="text-[10px] text-slate-500">{m.status}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Completed Members */}
-                      <div className="border border-emerald-100 bg-emerald-50/30 rounded-xl p-4 flex flex-col max-h-64 overflow-y-auto">
-                        <h4 className="font-bold text-emerald-900 mb-4 flex items-center justify-between sticky top-0 bg-emerald-50/90 pb-2 border-b border-emerald-100">
-                          <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Completed</span>
-                          <span className="text-xs font-bold bg-emerald-200 text-emerald-800 px-2 py-1 rounded">{progress.completed.length}</span>
-                        </h4>
-                        {progress.completed.length === 0 ? <p className="text-sm text-slate-500 italic mt-4 text-center">No members have completed yet.</p> : (
-                          <div className="space-y-3 mt-2">
-                            {progress.completed.map(m => (
-                              <div key={m.id} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-emerald-100 shadow-sm">
-                                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">{m.name.charAt(0)}</div>
-                                <div>
-                                  <p className="text-sm font-bold text-slate-900">{m.name}</p>
-                                  <p className="text-[10px] text-emerald-600 font-bold uppercase">{m.taskCount} Tasks Approved</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+ const handleSubmitForReview = async (rewardId, projectId, teamName) => {
+ try {
+ const submissionData = {
+ reward_id: rewardId,
+ employee_id: currentUser.id,
+ project_id: projectId,
+ team_name: teamName,
+ status: 'Submitted for Review'
+ };
+ 
+ await supabase.from('reward_submissions').insert([submissionData]);
+ fetchGlobalData();
+ } catch (err) {
+ console.error('Error submitting for review:', err);
+ }
+ };
 
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
+ if (!currentUser) return null;
+
+ return (
+ <div className="max-w-7xl mx-auto pb-24 animate-in fade-in slide-in-from-bottom-2 duration-150">
+ 
+ {/* Header */}
+ <div className="bg-[var(--surface)] p-8 mb-10 text-[var(--text-primary)] relative overflow-hidden">
+ <div className="absolute right-0 top-0 w-64 h-64 bg-[var(--bg-secondary)]0 rounded-full blur-3xl opacity-20 -mr-20 -mt-20"></div>
+ <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+ <div className="w-16 h-16 bg-gradient-to-br from-brand-400 to-indigo-500 flex items-center justify-center transform -rotate-6">
+ <Trophy className="w-8 h-8 text-[var(--text-primary)]" />
+ </div>
+ <div>
+ <h1 className="text-3xl font-extrabold tracking-tight mb-2">My Rewards Dashboard</h1>
+ <p className="text-[var(--text-muted)] max-w-xl text-lg">Track your team's progress, fulfill your tasks, and claim your well-deserved rewards.</p>
+ </div>
+ </div>
+ </div>
+
+ {/* Tabs */}
+ <div className="flex gap-2 mb-10 bg-white p-2 border border-[var(--border)] sticky top-6 z-40 overflow-x-auto">
+ {[
+ { id: 'current', label: 'Current Rewards', icon: Gift },
+ { id: 'upcoming', label: 'Upcoming', icon: Calendar },
+ { id: 'history', label: 'Reward History', icon: CheckCircle2 }
+ ].map(tab => {
+ const Icon = tab.icon;
+ const isActive = activeTab === tab.id;
+ return (
+ <button
+ key={tab.id}
+ onClick={() => setActiveTab(tab.id)}
+ className={`flex items-center gap-2 px-6 py-3 text-sm font-bold transition-all ${
+ isActive ? 'bg-[var(--surface)] text-[var(--text-primary)] ' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]'
+ }`}
+ >
+ <Icon className={`w-4 h-4 ${isActive ? 'text-[var(--text-secondary)]' : ''}`} /> {tab.label}
+ </button>
+ )
+ })}
+ </div>
+
+ {/* CURRENT REWARDS TAB */}
+ {activeTab === 'current' && (
+ <div className="space-y-8">
+ {currentRewards.length === 0 ? (
+ <div className="bg-white border border-[var(--border)] p-12 text-center">
+ <Gift className="w-16 h-16 text-[var(--text-muted)] mx-auto mb-6" />
+ <h3 className="page-title mb-2">No Active Rewards</h3>
+ <p className="text-[var(--text-secondary)] max-w-md mx-auto">There are currently no active rewards for the projects and teams you are assigned to. Keep up the good work!</p>
+ </div>
+ ) : (
+ <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+ 
+ {/* Left Column: Reward Hero & Timeline */}
+ <div className="lg:col-span-2 space-y-8">
+ 
+ {/* Reward Hero Card */}
+ {activeReward && (
+ <div className="bg-white border border-[var(--border)] overflow-hidden flex flex-col md:flex-row relative">
+ <div className="absolute top-6 right-4 z-10">
+ <span className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider backdrop-blur-md ${
+ activeReward.status === 'Unlocked' ? 'bg-emerald-500/90 text-white' : 'bg-[var(--surface)]/80 text-white'
+ }`}>
+ {activeReward.status === 'Unlocked' ? 'Unlocked & Ready' : 'Locked'}
+ </span>
+ </div>
+ {activeReward.image_url ? (
+ <div className="md:w-2/5 h-64 md:h-auto bg-[var(--surface-hover)] relative">
+ <img src={activeReward.image_url} alt={activeReward.title} className="w-full h-full object-cover" />
+ </div>
+ ) : (
+ <div className="md:w-2/5 h-64 md:h-auto bg-gradient-to-br from-brand-400 to-indigo-600 flex items-center justify-center p-8 text-center">
+ <div>
+ <Gift className="w-16 h-16 text-[var(--text-primary)]/50 mx-auto mb-6" />
+ <h3 className="page-title leading-tight">{activeReward.title}</h3>
+ </div>
+ </div>
+ )}
+ <div className="p-8 md:w-3/5 flex flex-col justify-center">
+ <div className="flex flex-wrap gap-2 mb-6">
+ <span className="text-xs font-bold bg-[var(--bg-secondary)] text-[var(--text-primary)] px-2 py-1 uppercase tracking-wider">
+ Project: {projects.find(p => p.id === activeReward.project_id)?.name || 'Unknown'}
+ </span>
+ <span className="text-xs font-bold bg-amber-50 text-amber-700 px-2 py-1 uppercase tracking-wider">
+ Team: {activeReward.team_name}
+ </span>
+ {activeReward.reward_type === 'Premium' && (
+ <span className="text-xs font-bold bg-purple-50 text-purple-700 px-2 py-1 uppercase tracking-wider flex items-center gap-1">
+ <Crown className="w-3 h-3"/> Premium
+ </span>
+ )}
+ </div>
+ 
+ <h2 className="text-3xl font-extrabold text-[var(--text-primary)] mb-3">{activeReward.title}</h2>
+ <p className="text-[var(--text-secondary)] mb-6 text-lg">{activeReward.description}</p>
+ 
+ <div className="flex items-center gap-2 text-sm font-bold text-[var(--text-secondary)] bg-[var(--bg-secondary)] p-3 border border-[var(--border)] inline-flex w-fit">
+ <Clock className="w-4 h-4 text-[var(--text-primary)]" />
+ Deadline: {activeReward.claim_deadline ? new Date(activeReward.claim_deadline).toLocaleString() : 'No Deadline'}
+ </div>
+ </div>
+ </div>
+ )}
+
+ {/* Team Progress & Member Status */}
+ {activeData && (
+ <div className="bg-white border border-[var(--border)] p-8">
+ <div className="flex justify-between items-center mb-10">
+ <div>
+ <h3 className="section-title">Team Progress</h3>
+ <p className="text-sm text-[var(--text-secondary)] mt-1">Live tracking of all assigned tasks.</p>
+ </div>
+ <div className="text-right">
+ <span className="text-3xl font-extrabold text-[var(--text-primary)]">{activeData.percentage}%</span>
+ </div>
+ </div>
+ 
+ <div className="w-full bg-[var(--bg-secondary)] rounded-full h-4 mb-6 overflow-hidden border border-[var(--border)]">
+ <div className="bg-[var(--bg-secondary)]0 h-full rounded-full transition-all duration-1000 relative" style={{ width: `${activeData.percentage}%` }}>
+ <div className="absolute inset-0 bg-white/20 w-full h-full animate-pulse"></div>
+ </div>
+ </div>
+ <div className="flex justify-between text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-10">
+ <span>{activeData.completedMembers.length} Members Completed</span>
+ <span>{activeData.pendingMembers.length} Members Remaining</span>
+ </div>
+
+ <h4 className="text-sm font-bold text-[var(--text-primary)] mb-6 uppercase tracking-wider">Team Member Status</h4>
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+ {activeData.completedMembers.map(emp => (
+ <div key={emp.id} className="flex items-center justify-between p-3 border border-emerald-100 bg-emerald-50">
+ <div className="flex items-center gap-3">
+ <div className="w-10 h-10 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center font-bold text-sm">
+ {emp.name.charAt(0)}
+ </div>
+ <span className="font-bold text-emerald-900">{emp.name}</span>
+ </div>
+ <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+ </div>
+ ))}
+ {activeData.pendingMembers.map(emp => (
+ <div key={emp.id} className="flex items-center justify-between p-3 border border-[var(--border)] bg-white">
+ <div className="flex items-center gap-3">
+ <div className="w-10 h-10 rounded-full bg-[var(--bg-secondary)] text-[var(--text-secondary)] flex items-center justify-center font-bold text-sm">
+ {emp.name.charAt(0)}
+ </div>
+ <div>
+ <span className="font-bold text-[var(--text-primary)] block">{emp.name}</span>
+ <span className="text-xs text-[var(--text-secondary)]">{emp.remainingTasks} Tasks Left</span>
+ </div>
+ </div>
+ <span className="text-xs font-bold text-[var(--text-secondary)] bg-[var(--bg-secondary)] px-2 py-1 rounded">{emp.status}</span>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
+ </div>
+
+ {/* Right Column: My Contribution, Claim Box, Timeline */}
+ <div className="space-y-8">
+ 
+ {/* My Contribution */}
+ {activeData && (
+ <div className="bg-[var(--surface)] p-6 text-[var(--text-primary)] relative overflow-hidden">
+ <div className="absolute right-0 top-0 w-32 h-32 bg-[var(--bg-secondary)]0 rounded-full blur-3xl opacity-30 -mr-10 -mt-10"></div>
+ <h3 className="text-lg font-bold mb-6 relative z-10">My Contribution</h3>
+ 
+ <div className="space-y-6 relative z-10">
+ <div>
+ <div className="flex justify-between items-end mb-2">
+ <span className="text-sm text-[var(--text-muted)]">My Progress</span>
+ <span className="text-2xl font-extrabold text-[var(--text-primary)]">{activeData.myProgress}%</span>
+ </div>
+ <div className="w-full bg-[var(--surface)] rounded-full h-2">
+ <div className="bg-white h-full rounded-full" style={{ width: `${activeData.myProgress}%` }}></div>
+ </div>
+ </div>
+ 
+ <div className="grid grid-cols-2 gap-6">
+ <div className="linear-card /50 p-6">
+ <p className="text-xs font-bold text-[var(--text-secondary)] uppercase mb-1">Completed</p>
+ <p className="text-xl font-bold">{activeData.myCompleted} <span className="text-sm text-[var(--text-secondary)] font-normal">/ {activeData.myTasks.length} Tasks</span></p>
+ </div>
+ <div className="linear-card /50 p-6">
+ <p className="text-xs font-bold text-[var(--text-secondary)] uppercase mb-1">Remaining</p>
+ <p className="text-xl font-bold text-amber-400">{activeData.myTasks.length - activeData.myCompleted}</p>
+ </div>
+ </div>
+ </div>
+ </div>
+ )}
+
+ {/* Claim Box */}
+ {activeReward && activeData && (
+ <div className="bg-white border border-[var(--border)] p-8 text-center">
+ {/* Eligibility Logic */}
+ {(() => {
+ const myClaim = rewardClaims.find(c => c.reward_id === activeReward.id && c.employee_id === currentUser.id);
+ const isTeamDone = activeData.percentage === 100;
+ const isMeDone = activeData.myProgress === 100 && activeData.myTasks.length > 0;
+ const isUnlocked = activeReward.status === 'Unlocked' || isTeamDone;
+ 
+ const mySubmission = rewardSubmissions?.find(s => s.reward_id === activeReward.id && s.employee_id === currentUser.id);
+ 
+ if (mySubmission) {
+ if (mySubmission.status === 'Approved') {
+ return (
+ <>
+ <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+ <Trophy className="w-8 h-8 text-emerald-600" />
+ </div>
+ <h3 className="section-title mb-2">Reward Approved!</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-6">Your manager has approved your reward submission.</p>
+ <div className="bg-[var(--bg-secondary)] p-3 border border-[var(--border)] text-xs font-bold text-[var(--text-secondary)] break-all">
+ Reviewed on: {mySubmission.reviewed_at ? new Date(mySubmission.reviewed_at).toLocaleDateString() : 'N/A'}
+ </div>
+ </>
+ );
+ } else if (mySubmission.status === 'Rejected') {
+ return (
+ <>
+ <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+ <AlertCircle className="w-8 h-8 text-red-600" />
+ </div>
+ <h3 className="section-title mb-2">Submission Rejected</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-6 text-red-600">{mySubmission.manager_comments}</p>
+ <button onClick={() => handleSubmitForReview(activeReward.id, activeReward.project_id, activeReward.team_name)} className="w-full py-3 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-medium border border-[var(--border)] hover:bg-[var(--btn-primary-hover)] font-bold hover:bg-[var(--btn-primary-hover)]">
+ Resubmit for Review
+ </button>
+ </>
+ );
+ } else {
+ return (
+ <>
+ <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
+ <Clock className="w-8 h-8 text-[var(--text-primary)]" />
+ </div>
+ <h3 className="section-title mb-2">Submitted for Review</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-6">Your submission is pending manager approval.</p>
+ </>
+ );
+ }
+ }
+
+ if (isUnlocked && isMeDone) {
+ return (
+ <>
+ <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
+ <Unlock className="w-8 h-8 text-[var(--text-primary)]" />
+ </div>
+ <h3 className="section-title mb-2">Eligible to Claim!</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-6">Your team has qualified and you have finished your tasks.</p>
+ <button onClick={() => handleSubmitForReview(activeReward.id, activeReward.project_id, activeReward.team_name)} className="w-full py-3 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-medium border border-[var(--border)] hover:bg-[var(--btn-primary-hover)] font-bold hover:bg-[var(--btn-primary-hover)] transition-all transform hover:scale-105">
+ Submit for Reward Review
+ </button>
+ </>
+ );
+ }
+
+ return (
+ <>
+ <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
+ <Lock className="w-8 h-8 text-[var(--text-secondary)]" />
+ </div>
+ <h3 className="section-title mb-2">Reward Locked</h3>
+ <div className="text-sm text-[var(--text-secondary)] space-y-2 mb-6 text-left bg-[var(--bg-secondary)] p-6 border border-[var(--border)]">
+ <p className="font-bold text-[var(--text-primary)] mb-2 uppercase text-xs tracking-wider">Waiting For:</p>
+ {!isMeDone && <p className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-amber-500"/> You to finish your tasks</p>}
+ {!isTeamDone && <p className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-amber-500"/> {activeData.pendingMembers.length} Team members to finish</p>}
+ </div>
+ <button disabled className="w-full py-3 bg-[var(--bg-secondary)] text-[var(--text-secondary)] font-bold cursor-not-allowed">
+ Claim Unavailable
+ </button>
+ </>
+ );
+ })()}
+ </div>
+ )}
+
+ {/* Hybrid Timeline */}
+ {activeReward && activeData && (() => {
+ const mySubmission = rewardSubmissions?.find(s => s.reward_id === activeReward.id && s.employee_id === currentUser.id);
+ const isMeDone = activeData.myProgress === 100 && activeData.myTasks.length > 0;
+ const isTeamDone = activeData.percentage === 100;
+ 
+ const timeline = [
+ { 
+ title: 'Reward Created', 
+ time: activeReward.created_at ? new Date(activeReward.created_at).toLocaleDateString() : 'Historical', 
+ done: true 
+ },
+ { 
+ title: 'Tasks Assigned', 
+ time: activeReward.start_date ? new Date(activeReward.start_date).toLocaleDateString() : 'Historical', 
+ done: true 
+ },
+ { 
+ title: 'My Tasks Completed', 
+ time: isMeDone ? 'Live Status' : 'Pending', 
+ done: isMeDone,
+ dynamic: true
+ },
+ { 
+ title: 'Team Qualified', 
+ time: isTeamDone ? 'Live Status' : 'Pending', 
+ done: isTeamDone,
+ dynamic: true
+ },
+ { 
+ title: 'Submitted for Review', 
+ time: mySubmission ? new Date(mySubmission.submitted_at).toLocaleDateString() : 'Pending', 
+ done: !!mySubmission 
+ },
+ { 
+ title: 'Manager Approved', 
+ time: mySubmission?.status === 'Approved' ? new Date(mySubmission.reviewed_at).toLocaleDateString() : 'Pending', 
+ done: mySubmission?.status === 'Approved' 
+ }
+ ];
+
+ return (
+ <div className="bg-white border border-[var(--border)] p-6">
+ <h4 className="text-sm font-bold text-[var(--text-primary)] mb-6 uppercase tracking-wider flex items-center gap-2">
+ <Milestone className="w-4 h-4 text-[var(--text-primary)]" /> Reward Timeline
+ </h4>
+ <div className="space-y-6 relative before:absolute before:inset-0 before:ml-2.5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+ {timeline.map((item, idx) => (
+ <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+ <div className={`flex items-center justify-center w-5 h-5 rounded-full border-2 bg-white shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 ${item.done ? 'border-emerald-500 text-emerald-500' : 'border-[var(--border)] text-[var(--text-muted)]'}`}>
+ {item.done && <Check className="w-3 h-3" />}
+ </div>
+ <div className="w-[calc(100%-2.5rem)] md:w-[calc(50%-1.5rem)] p-3 border border-[var(--border)] bg-[var(--bg-secondary)] flex flex-col justify-center">
+ <div className="flex items-center justify-between mb-1">
+ <span className={`font-bold text-sm ${item.done ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{item.title}</span>
+ {item.dynamic && <span className="text-[10px] font-bold bg-[var(--bg-secondary)] text-[var(--text-primary)] px-1.5 py-0.5 rounded uppercase">Live</span>}
+ </div>
+ <span className="text-xs text-[var(--text-secondary)] font-medium">{item.time}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ </div>
+ );
+ })()}
+
+ </div>
+ </div>
+ )}
+ </div>
+ )}
+
+ {/* UPCOMING REWARDS TAB */}
+ {activeTab === 'upcoming' && (
+ <div className="space-y-6">
+ <h2 className="section-title mb-6">Upcoming Rewards</h2>
+ {upcomingRewards.length === 0 ? (
+ <div className="bg-[var(--bg-secondary)] border border-[var(--border)] p-8 text-center">
+ <Calendar className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-6" />
+ <p className="text-[var(--text-secondary)]">No upcoming rewards scheduled yet.</p>
+ </div>
+ ) : (
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+ {upcomingRewards.map(reward => (
+ <div key={reward.id} className="bg-white border border-[var(--border)] p-6 flex flex-col items-center text-center opacity-80 hover:opacity-100 transition-opacity">
+ <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mb-6">
+ <Lock className="w-8 h-8 text-[var(--text-secondary)]" />
+ </div>
+ <h3 className="section-title mb-2">{reward.title}</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-6">{reward.description}</p>
+ <div className="mt-auto pt-4 border-t border-[var(--border)] w-full text-sm font-bold text-[var(--text-primary)]">
+ Unlocks: {new Date(reward.start_date).toLocaleDateString()}
+ </div>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ )}
+
+ {/* REWARD HISTORY TAB */}
+ {activeTab === 'history' && (
+ <div className="space-y-6">
+ <h2 className="section-title mb-6">Reward History</h2>
+ {historyRewards.length === 0 ? (
+ <div className="bg-[var(--bg-secondary)] border border-[var(--border)] p-8 text-center">
+ <CheckCircle2 className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-6" />
+ <p className="text-[var(--text-secondary)]">Your completed and past rewards will appear here.</p>
+ </div>
+ ) : (
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+ {historyRewards.map(reward => {
+ const mySub = rewardSubmissions?.find(c => c.reward_id === reward.id && c.employee_id === currentUser.id);
+ const isClaimed = mySub?.status === 'Approved';
+ 
+ return (
+ <div key={reward.id} className="bg-white border border-[var(--border)] p-6 flex items-center gap-6">
+ <div className={`w-16 h-16 flex items-center justify-center shrink-0 ${isClaimed ? 'bg-emerald-100 text-emerald-600' : (mySub?.status === 'Rejected' ? 'bg-red-100 text-red-600' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]')}`}>
+ {isClaimed ? <Trophy className="w-8 h-8" /> : (mySub?.status === 'Rejected' ? <AlertCircle className="w-8 h-8" /> : <Clock className="w-8 h-8" />)}
+ </div>
+ <div className="flex-1">
+ <h3 className="card-title">{reward.title}</h3>
+ <p className="text-sm text-[var(--text-secondary)] mb-2">{reward.team_name}</p>
+ <span className={`text-xs font-bold px-2.5 py-1 uppercase ${isClaimed ? 'bg-emerald-50 text-emerald-700' : (mySub?.status === 'Rejected' ? 'bg-red-50 text-red-700' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)]')}`}>
+ {mySub ? mySub.status : reward.status}
+ </span>
+ </div>
+ </div>
+ )
+ })}
+ </div>
+ )}
+ </div>
+ )}
+
+ </div>
+ );
 }
+
+
+
+
+
+
+
+
+
+

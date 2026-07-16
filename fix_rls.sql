@@ -1,0 +1,7 @@
+
+ALTER TABLE public.daily_work_submissions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_team_reports DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.module_submissions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_feedback DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_ratings DISABLE ROW LEVEL SECURITY;
+

@@ -20,9 +20,12 @@ import DailyUpdates from './pages/DailyUpdates';
 import EmployeeCalendar from './pages/EmployeeCalendar';
 import EmployeeNotifications from './pages/EmployeeNotifications';
 import EmployeePerformance from './pages/EmployeePerformance';
+import EmployeeFeedback from './pages/EmployeeFeedback';
 import EmployeeRewards from './pages/EmployeeRewards';
 import EmployeeDocuments from './pages/EmployeeDocuments';
 import EmployeeSettings from './pages/EmployeeSettings';
+import TeamLeaderWorkspace from './pages/TeamLeaderWorkspace';
+import CompletedProjects from './pages/CompletedProjects';
 import { useAppContext } from './context/AppContext';
 
 // Simple wrapper for protected routes
@@ -60,6 +63,7 @@ function App() {
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="manager/rewards" element={<ManagerRewards />} />
           <Route path="manager/resources" element={<ManagerResources />} />
+          <Route path="completed-projects" element={<CompletedProjects />} />
         </Route>
 
         {/* Employee Routes */}
@@ -72,9 +76,11 @@ function App() {
           <Route path="calendar" element={<EmployeeCalendar />} />
           <Route path="notifications" element={<EmployeeNotifications />} />
           <Route path="performance" element={<EmployeePerformance />} />
+          <Route path="feedback" element={<EmployeeFeedback />} />
           <Route path="rewards" element={<EmployeeRewards />} />
           <Route path="documents" element={<EmployeeDocuments />} />
           <Route path="settings" element={<EmployeeSettings />} />
+          <Route path="team-leader" element={<TeamLeaderWorkspace />} />
         </Route>
       </Routes>
     </BrowserRouter>

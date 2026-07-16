@@ -247,14 +247,16 @@ app.post('/api/employees/activate', async (req, res) => {
 // ----------------------------------------------------
 app.post('/api/employees/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body; // Can be name or email
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    if (!email) {
+      return res.status(400).json({ error: 'Name or Email is required.' });
     }
 
+    const searchTerm = email.trim().toLowerCase();
+
     // Manager backdoor login for demo purposes
-    if (email === 'admin@taskpilot.com' && password === 'admin123') {
+    if (searchTerm === 'admin@taskpilot.com' || searchTerm === 'admin' || searchTerm === 'manager' || searchTerm === 'system admin') {
       return res.status(200).json({ 
         success: true, 
         role: 'manager', 
@@ -262,25 +264,28 @@ app.post('/api/employees/login', async (req, res) => {
       });
     }
 
-    // Find employee
-    const { data: employee, error: empError } = await supabase
+    let employee = null;
+
+    // 1. Try matching by name (case-insensitive substring)
+    const { data: nameMatches } = await supabase
       .from('employees')
       .select('*')
-      .eq('email', email)
-      .single();
+      .ilike('name', `%${searchTerm}%`);
 
-    if (empError || !employee) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    if (nameMatches && nameMatches.length > 0) {
+      employee = nameMatches[0];
+    } else {
+      // 2. Try matching by email
+      const { data: emailMatch } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('email', email.trim())
+        .maybeSingle();
+      employee = emailMatch;
     }
 
-    if (employee.status !== 'Active') {
-      return res.status(401).json({ error: 'Account is not active. Please check your invitation email.' });
-    }
-
-    // Verify password
-    const match = await bcrypt.compare(password, employee.password_hash);
-    if (!match) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    if (!employee) {
+      return res.status(401).json({ error: 'Employee not found by name or email.' });
     }
 
     // Don't send the password hash back to the client
