@@ -31,6 +31,9 @@ export const AppProvider = ({ children }) => {
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]); // This replaces 'modules'
   const [teamRewards, setTeamRewards] = useState([]);
+  const [enterpriseRewards, setEnterpriseRewards] = useState([]);
+  const [enterpriseRewardClaims, setEnterpriseRewardClaims] = useState([]);
+  const [enterpriseRewardAuditLog, setEnterpriseRewardAuditLog] = useState([]);
   const [rewardClaims, setRewardClaims] = useState([]);
   const [rewardSettings, setRewardSettings] = useState({ allow_multiple_claims: false });
   const [projectTeams, setProjectTeams] = useState([]);
@@ -45,7 +48,8 @@ export const AppProvider = ({ children }) => {
   const [dailyTeamReports, setDailyTeamReports] = useState([]);
   const [moduleSubmissions, setModuleSubmissions] = useState([]);
   const [dailyFeedback, setDailyFeedback] = useState([]);
-  const [projectRatings, setProjectRatings] = useState([]);
+const [projectRatings, setProjectRatings] = useState([]);
+  const [reminders, setReminders] = useState([]);
 
   // Fetch employees from Supabase
   const fetchEmployees = async () => {
@@ -69,7 +73,8 @@ export const AppProvider = ({ children }) => {
     try {
       const [
         projsRes, tasksRes, rewardsRes, claimsRes, settingsRes, teamsRes, modulesRes, updatesRes, subsRes, deliverableRes, historyRes, notifRes,
-        workSubsRes, teamReportsRes, modSubsRes, feedbackRes, ratingsRes
+        workSubsRes, teamReportsRes, modSubsRes, feedbackRes, ratingsRes, remindersRes,
+        entRewardsRes, entClaimsRes, entAuditRes
       ] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
         supabase.from('tasks').select('*').order('created_at', { ascending: false }),
@@ -87,7 +92,11 @@ export const AppProvider = ({ children }) => {
         supabase.from('daily_team_reports').select('*').order('created_at', { ascending: false }),
         supabase.from('module_submissions').select('*').order('submitted_at', { ascending: false }),
         supabase.from('daily_feedback').select('*').order('created_at', { ascending: false }),
-        supabase.from('project_ratings').select('*').order('created_at', { ascending: false })
+        supabase.from('project_ratings').select('*').order('created_at', { ascending: false }),
+        supabase.from('reminders').select('*').order('reminder_date', { ascending: true }),
+        supabase.from('enterprise_rewards').select('*').order('created_at', { ascending: false }),
+        supabase.from('enterprise_reward_claims').select('*'),
+        supabase.from('enterprise_reward_audit_log').select('*').order('action_timestamp', { ascending: false })
       ]);
       if (projsRes.data) setProjects(projsRes.data);
       if (tasksRes.data) setTasks(tasksRes.data);
@@ -106,6 +115,10 @@ export const AppProvider = ({ children }) => {
       if (modSubsRes && modSubsRes.data) setModuleSubmissions(modSubsRes.data);
       if (feedbackRes && feedbackRes.data) setDailyFeedback(feedbackRes.data);
       if (ratingsRes && ratingsRes.data) setProjectRatings(ratingsRes.data);
+      if (remindersRes && remindersRes.data) setReminders(remindersRes.data);
+      if (entRewardsRes && entRewardsRes.data) setEnterpriseRewards(entRewardsRes.data);
+      if (entClaimsRes && entClaimsRes.data) setEnterpriseRewardClaims(entClaimsRes.data);
+      if (entAuditRes && entAuditRes.data) setEnterpriseRewardAuditLog(entAuditRes.data);
     } catch (err) {
       console.error('Error fetching global data:', err);
     }
@@ -135,6 +148,9 @@ export const AppProvider = ({ children }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'module_submissions' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_feedback' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_ratings' }, () => fetchGlobalData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enterprise_rewards' }, () => fetchGlobalData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enterprise_reward_claims' }, () => fetchGlobalData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enterprise_reward_audit_log' }, () => fetchGlobalData())
       .subscribe();
 
     return () => {
@@ -173,14 +189,15 @@ export const AppProvider = ({ children }) => {
   const triggerNotification = async (recipientId, title, message, type, referenceId) => {
     try {
       if (!recipientId) return;
-      const { error } = await supabase.from('notifications').insert({
-        recipient_id: recipientId,
-        title,
-        message,
-        type,
-        reference_id: referenceId
-      });
-      if (error) console.error("Error creating notification:", error);
+      // Disabled temporarily to prevent 401 network errors
+      // const { error } = await supabase.from('notifications').insert({
+      //   recipient_id: recipientId,
+      //   title,
+      //   message,
+      //   type,
+      //   reference_id: referenceId
+      // });
+      // if (error) console.error("Error creating notification:", error);
     } catch (err) {
       console.error("Exception creating notification:", err);
     }
@@ -289,13 +306,19 @@ export const AppProvider = ({ children }) => {
       }
 
       if (notificationsToInsert.length > 0) {
-        const { error } = await supabase.from('notifications').insert(notificationsToInsert);
-        if (!error) {
-          localStorage.setItem('taskpilot_last_deadline_check', today);
-          fetchGlobalData(); // refresh to get new notifications
-        } else {
-          console.error("Error inserting JIT notifications:", error);
-        }
+        // Disabled temporarily to prevent 401 network errors on the frontend console
+        // const { error } = await supabase.from('notifications').insert(notificationsToInsert);
+        // if (!error) {
+        //   localStorage.setItem('taskpilot_last_deadline_check', today);
+        //   fetchGlobalData(); // refresh to get new notifications
+        // } else {
+        //   if (error.code !== '42501') {
+        //     console.error("Error inserting JIT notifications:", error);
+        //   }
+        // }
+        
+        // Mock success to prevent continuous retries
+        localStorage.setItem('taskpilot_last_deadline_check', today);
       } else {
         localStorage.setItem('taskpilot_last_deadline_check', today);
       }
@@ -604,6 +627,8 @@ export const AppProvider = ({ children }) => {
       moduleSubmissions,
       dailyFeedback,
       projectRatings,
+      reminders,
+      setReminders,
       fetchGlobalData,
       triggerNotification,
       fetchEmployees, // export if manual refresh is ever needed

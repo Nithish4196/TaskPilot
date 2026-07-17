@@ -1,471 +1,363 @@
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext, supabase } from '../context/AppContext';
-import { Gift, Calendar, Users, Target, CheckCircle2, AlertCircle, Plus, Settings, Crown, Upload, Search, X } from 'lucide-react';
+import { 
+  Gift, Users, Target, CheckCircle2, AlertCircle, Plus, 
+  Crown, Upload, Search, X, BarChart3, Clock, Lock, Unlock,
+  Archive, FileText, CheckSquare, Settings
+} from 'lucide-react';
 
 export default function ManagerRewards() {
- const { teamRewards, rewardSettings, fetchGlobalData, employees, tasks, projects, projectTeams, rewardSubmissions } = useAppContext();
- 
- const [activeTab, setActiveTab] = useState('active'); // active, premium, settings
- const [isCreating, setIsCreating] = useState(false);
- const [loading, setLoading] = useState(false);
- const [selectedRewardId, setSelectedRewardId] = useState(null);
- 
- const [formData, setFormData] = useState({
- reward_type: 'Weekly',
- project_id: '',
- team_name: '',
- week_number: '',
- title: '',
- description: '',
- category: 'Activity',
- reward_date: '',
- deadline: '',
- start_date: '',
- end_date: '',
- image_file: null,
- rules: []
- });
+  const { 
+    enterpriseRewards = [], 
+    enterpriseRewardClaims = [], 
+    enterpriseRewardAuditLog = [], 
+    employees = [], 
+    projects = [], 
+    projectTeams = [], 
+    tasks = [],
+    projectModules = [],
+    currentUser,
+    fetchGlobalData
+  } = useAppContext();
 
- const activeProjects = projects.filter(p => p.status === 'Active');
- 
- const uniqueTeams = formData.project_id 
- ? projectTeams.filter(t => t.project_id === formData.project_id).map(t => t.team_name)
- : [];
+  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, list, approvals, audit
+  const [isCreating, setIsCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    reward_type: 'Weekly',
+    reward_value: '',
+    project_id: '',
+    team_id: '',
+    priority: 'Medium',
+    expiry_date: '',
+    rules: '',
+    image_file: null,
+    image_url: ''
+  });
 
- const handleCreate = async (e) => {
- e.preventDefault();
- setLoading(true);
- try {
- let imageUrl = null;
- if (formData.image_file) {
- const fileExt = formData.image_file.name.split('.').pop();
- const fileName = `${Math.random()}.${fileExt}`;
- const { data: uploadData, error: uploadError } = await supabase.storage
- .from('reward_images')
- .upload(fileName, formData.image_file);
- 
- if (uploadError) throw uploadError;
- 
- const { data: publicUrlData } = supabase.storage.from('reward_images').getPublicUrl(fileName);
- imageUrl = publicUrlData.publicUrl;
- }
+  // Analytics
+  const stats = useMemo(() => {
+    return {
+      total: enterpriseRewards.length,
+      locked: enterpriseRewards.filter(r => r.status === 'Locked').length,
+      unlocked: enterpriseRewards.filter(r => r.status === 'Unlocked' || r.status === 'Ready for Unlock').length,
+      claimed: enterpriseRewards.filter(r => r.status === 'Claimed').length,
+      completed: enterpriseRewards.filter(r => r.status === 'Completed').length,
+    };
+  }, [enterpriseRewards]);
 
- const { error } = await supabase.from('team_rewards').insert([{
- reward_type: formData.reward_type,
- project_id: formData.project_id || null,
- team_name: formData.team_name,
- week_number: formData.week_number ? parseInt(formData.week_number) : null,
- title: formData.title,
- description: formData.description,
- category: formData.category,
- image_url: imageUrl,
- start_date: formData.start_date ? new Date(formData.start_date).toISOString() : null,
- end_date: formData.end_date ? new Date(formData.end_date).toISOString() : null,
- reward_date: formData.reward_date ? new Date(formData.reward_date).toISOString() : null,
- claim_deadline: formData.deadline ? new Date(formData.deadline).toISOString() : null,
- rules: formData.rules,
- status: 'Locked'
- }]);
- 
- if (error) throw error;
- 
- setIsCreating(false);
- fetchGlobalData();
- } catch (err) {
- console.error('Error creating reward:', err);
- alert('Error creating reward. Check console.');
- } finally {
- setLoading(false);
- }
- };
+  // Image Upload Logic
+  const handleImageUpload = async (file) => {
+    if (!file) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
 
- const handleUpdateSettings = async (val) => {
- try {
- await supabase.from('reward_settings').update({ allow_multiple_claims: val }).eq('id', 1);
- fetchGlobalData();
- } catch (e) {
- console.error(e);
- }
- };
+    const { error: uploadError } = await supabase.storage
+      .from('reward-images')
+      .upload(filePath, file);
 
- const handleDelete = async (id) => {
- if(!window.confirm('Are you sure you want to delete this reward?')) return;
- await supabase.from('team_rewards').delete().eq('id', id);
- fetchGlobalData();
- };
+    if (uploadError) {
+      alert('Error uploading image: ' + uploadError.message);
+      return null;
+    }
 
- const getTeamProgress = (teamName, projectId) => {
- const teamMembers = employees.filter(e => e.team === teamName);
- if (teamMembers.length === 0) return { completed: [], pending: [], percentage: 0 };
- 
- const memberIds = teamMembers.map(m => m.id);
- let teamTasks = tasks.filter(t => memberIds.includes(t.employee_id));
- if (projectId) {
- teamTasks = teamTasks.filter(t => t.project_id === projectId);
- }
- 
- let completedMembers = [];
- let pendingMembers = [];
+    const { data } = supabase.storage.from('reward-images').getPublicUrl(filePath);
+    return data.publicUrl;
+  };
 
- teamMembers.forEach(emp => {
- const empTasks = teamTasks.filter(t => t.employee_id === emp.id);
- if (empTasks.length === 0) {
- pendingMembers.push({ ...emp, remainingTasks: 0, status: 'No Tasks' });
- return;
- }
- 
- const isCompleted = empTasks.every(t => t.status === 'Completed' && t.approval_status === 'Approved');
- if (isCompleted) {
- completedMembers.push({ ...emp, taskCount: empTasks.length });
- } else {
- const remaining = empTasks.filter(t => t.status !== 'Completed' || t.approval_status !== 'Approved');
- pendingMembers.push({ ...emp, remainingTasks: remaining.length, status: remaining[0]?.status || 'Pending' });
- }
- });
+  const handleCreateReward = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    let imageUrl = formData.image_url;
+    if (formData.image_file) {
+      const uploadedUrl = await handleImageUpload(formData.image_file);
+      if (uploadedUrl) imageUrl = uploadedUrl;
+    }
 
- const percentage = teamMembers.length === 0 ? 0 : Math.round((completedMembers.length / teamMembers.length) * 100);
- 
- return {
- completed: completedMembers,
- pending: pendingMembers,
- percentage,
- totalMembers: teamMembers.length
- };
- };
+    const newReward = {
+      title: formData.title,
+      description: formData.description,
+      reward_type: formData.reward_type,
+      reward_value: formData.reward_value,
+      project_id: formData.project_id,
+      team_id: formData.team_id,
+      priority: formData.priority,
+      expiry_date: formData.expiry_date ? new Date(formData.expiry_date).toISOString() : null,
+      rules: formData.rules ? formData.rules.split(',').map(r => r.trim()) : [],
+      image_url: imageUrl,
+      status: 'Draft'
+    };
 
- return (
- <div className="max-w-7xl mx-auto pb-24 animate-in fade-in slide-in-from-bottom-2 duration-150">
- <div className="flex justify-between items-end mb-6">
- <div>
- <h1 className="page-title">Reward Management</h1>
- <p className="text-[var(--text-secondary)] mt-2">Manage weekly and premium rewards for your teams.</p>
- </div>
- <button 
- onClick={() => {
- setIsCreating(!isCreating);
- setFormData({...formData, reward_type: activeTab === 'premium' ? 'Premium' : 'Weekly'});
- }}
- className="flex items-center gap-2 px-4 py-2 bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] font-medium border border-[var(--border)] hover:bg-[var(--btn-primary-hover)] font-bold hover:bg-[var(--btn-primary-hover)] transition-colors text-sm"
- >
- {isCreating ? 'Cancel' : <><Plus className="w-4 h-4" /> Create Reward</>}
- </button>
- </div>
+    const { data: insertedReward, error } = await supabase
+      .from('enterprise_rewards')
+      .insert([newReward])
+      .select();
 
- <div className="flex gap-6 border-b border-[var(--border)] mb-10">
- <button 
- onClick={() => {setActiveTab('active'); setIsCreating(false);}}
- className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'active' ? 'border-[var(--border)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
- >
- <Gift className="w-4 h-4 inline-block mr-2" /> Weekly Rewards
- </button>
- <button 
- onClick={() => {setActiveTab('premium'); setIsCreating(false);}}
- className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'premium' ? 'border-amber-500 text-amber-600' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
- >
- <Crown className="w-4 h-4 inline-block mr-2" /> Premium Rewards
- </button>
- <button 
- onClick={() => {setActiveTab('reviews'); setIsCreating(false);}}
- className={`pb-3 text-sm font-bold border-b-2 transition-colors relative ${activeTab === 'reviews' ? 'border-[var(--border)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
- >
- <CheckCircle2 className="w-4 h-4 inline-block mr-2" /> Reward Reviews
- {rewardSubmissions?.filter(s => s.status === 'Submitted for Review').length > 0 && (
- <span className="absolute -top-2 -right-3 badge-rejected text-[10px] font-bold px-1.5 py-0.5 rounded-full">
- {rewardSubmissions.filter(s => s.status === 'Submitted for Review').length}
- </span>
- )}
- </button>
- <button 
- onClick={() => {setActiveTab('settings'); setIsCreating(false);}}
- className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'settings' ? 'border-[var(--border)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
- >
- <Settings className="w-4 h-4 inline-block mr-2" /> Settings
- </button>
- </div>
+    if (error) {
+      alert('Error creating reward: ' + error.message);
+    } else if (insertedReward && insertedReward[0]) {
+      // Create Audit Log
+      await supabase.from('enterprise_reward_audit_log').insert([{
+        reward_id: insertedReward[0].id,
+        action_type: 'Created',
+        action_by: currentUser?.id,
+        action_by_role: 'Manager',
+        details: { status: 'Draft', type: formData.reward_type }
+      }]);
+      setIsCreating(false);
+      fetchGlobalData();
+    }
+    setLoading(false);
+  };
 
- {activeTab === 'settings' && (
- <div className="bg-white p-6 border border-[var(--border)] max-w-2xl">
- <h2 className="card-title mb-6 flex items-center gap-2">
- <Settings className="w-5 h-5 text-[var(--text-secondary)]" /> Global Reward Settings
- </h2>
- <div className="flex items-center justify-between p-6 bg-[var(--bg-secondary)] border border-[var(--border)]">
- <div>
- <h3 className="font-bold text-[var(--text-primary)]">Allow Multiple Claims</h3>
- <p className="text-sm text-[var(--text-secondary)]">If enabled, employees can claim all rewards they qualify for. If disabled, they must choose only one.</p>
- </div>
- <label className="relative inline-flex items-center cursor-pointer">
- <input 
- type="checkbox" 
- className="sr-only peer" 
- checked={rewardSettings?.allow_multiple_claims || false}
- onChange={(e) => handleUpdateSettings(e.target.checked)}
- />
- <div className="w-11 h-6 bg-[var(--surface-hover)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-[var(--border)] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[var(--border)] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--btn-primary-bg)]"></div>
- </label>
- </div>
- </div>
- )}
+  const updateRewardStatus = async (id, newStatus) => {
+    setLoading(true);
+    const { error } = await supabase
+      .from('enterprise_rewards')
+      .update({ status: newStatus })
+      .eq('id', id);
 
- {activeTab === 'reviews' && (
- <div className="space-y-6">
- {(!rewardSubmissions || rewardSubmissions.length === 0) ? (
- <div className="bg-white border border-[var(--border)] p-12 text-center">
- <CheckCircle2 className="w-16 h-16 text-[var(--text-muted)] mx-auto mb-6" />
- <h3 className="page-title mb-2">No Submissions</h3>
- <p className="text-[var(--text-secondary)]">There are no reward submissions awaiting review.</p>
- </div>
- ) : (
- <div className="grid grid-cols-1 gap-6">
- {rewardSubmissions.map(sub => {
- const emp = employees.find(e => e.id === sub.employee_id);
- const proj = projects.find(p => p.id === sub.project_id);
- const reward = teamRewards.find(r => r.id === sub.reward_id);
- 
- return (
- <div key={sub.id} className="bg-white p-6 border border-[var(--border)] flex flex-col md:flex-row items-center justify-between gap-6">
- <div className="flex items-center gap-6">
- <div className="w-12 h-12 rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] flex items-center justify-center font-bold">
- {emp?.name?.charAt(0) || '?'}
- </div>
- <div>
- <h3 className="font-bold text-[var(--text-primary)] text-lg">{emp?.name || 'Unknown Employee'}</h3>
- <p className="text-sm text-[var(--text-secondary)]">
- <span className="font-bold text-[var(--text-primary)]">{proj?.name || 'Unknown Project'}</span> &bull; {sub.team_name}
- </p>
- </div>
- </div>
- 
- <div className="flex-1 px-6 border-x border-[var(--border)]">
- <p className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Target Reward</p>
- <h4 className="font-bold text-[var(--text-primary)]">{reward?.title || 'Unknown Reward'}</h4>
- <p className="text-xs text-[var(--text-secondary)]">Submitted: {new Date(sub.submitted_at).toLocaleString()}</p>
- </div>
- 
- <div>
- {sub.status === 'Submitted for Review' ? (
- <div className="flex gap-2">
- <button onClick={async () => {
- await supabase.from('reward_submissions').update({ status: 'Approved', reviewed_at: new Date().toISOString() }).eq('id', sub.id);
- fetchGlobalData();
- }} className="px-4 py-2 badge-completed font-bold hover:bg-emerald-600">Approve</button>
- <button onClick={async () => {
- const reason = window.prompt("Rejection reason:");
- if(reason !== null) {
- await supabase.from('reward_submissions').update({ status: 'Rejected', manager_comments: reason, reviewed_at: new Date().toISOString() }).eq('id', sub.id);
- fetchGlobalData();
- }
- }} className="px-4 py-2 bg-red-100 text-red-600 font-bold hover:bg-red-200">Reject</button>
- </div>
- ) : (
- <span className={`px-4 py-2 font-bold text-sm ${sub.status === 'Approved' ? 'badge-completed' : 'bg-red-100 text-red-700'}`}>
- {sub.status}
- </span>
- )}
- </div>
- </div>
- );
- })}
- </div>
- )}
- </div>
- )}
+    if (!error) {
+      await supabase.from('enterprise_reward_audit_log').insert([{
+        reward_id: id,
+        action_type: 'Status Change',
+        action_by: currentUser?.id,
+        action_by_role: 'Manager',
+        details: { new_status: newStatus }
+      }]);
+      fetchGlobalData();
+    } else {
+      alert("Error: " + error.message);
+    }
+    setLoading(false);
+  };
 
- {isCreating && activeTab !== 'settings' && activeTab !== 'reviews' && (
- <div className="bg-white p-8 border border-[var(--border)] mb-10 animate-in slide-in-from-top-6">
- <h2 className="section-title mb-6">Create {formData.reward_type} Reward</h2>
- <form onSubmit={handleCreate} className="space-y-6">
- <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
- 
- <div className="bg-[var(--bg-secondary)] p-6 border border-[var(--border)] space-y-6 md:col-span-2">
- <h3 className="text-sm font-bold text-[var(--text-primary)] border-b pb-2">Target Audience</h3>
- <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Active Project (Required)</label>
- <select required className="w-full px-3 py-2 border" value={formData.project_id} onChange={e => setFormData({...formData, project_id: e.target.value})}>
- <option value="">Select an Active Project...</option>
- {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
- </select>
- </div>
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Target Team</label>
- <select required className="w-full px-3 py-2 border disabled:opacity-50" disabled={!formData.project_id} value={formData.team_name} onChange={e => setFormData({...formData, team_name: e.target.value})}>
- <option value="">Select Team...</option>
- {uniqueTeams.map(t => <option key={t} value={t}>{t}</option>)}
- </select>
- </div>
- </div>
- </div>
+  const renderDashboard = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {[
+          { label: 'Total Rewards', value: stats.total, icon: <Gift className="w-5 h-5 text-indigo-500" /> },
+          { label: 'Locked', value: stats.locked, icon: <Lock className="w-5 h-5 text-red-500" /> },
+          { label: 'Unlocked', value: stats.unlocked, icon: <Unlock className="w-5 h-5 text-emerald-500" /> },
+          { label: 'Claimed', value: stats.claimed, icon: <CheckCircle2 className="w-5 h-5 text-blue-500" /> },
+          { label: 'Completed', value: stats.completed, icon: <Archive className="w-5 h-5 text-gray-500" /> },
+        ].map((s, i) => (
+          <div key={i} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-secondary)]">{s.label}</p>
+              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">{s.value}</p>
+            </div>
+            <div className="p-3 bg-[var(--bg-secondary)] rounded-lg">{s.icon}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Reward Title</label>
- <input type="text" required placeholder="e.g. Trip to Goa" className="w-full px-3 py-2 border" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
- </div>
- 
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Category</label>
- <select className="w-full px-3 py-2 border" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
- <option>Activity</option>
- <option>Food & Dining</option>
- <option>Gift</option>
- <option>Trip</option>
- <option>Bonus</option>
- </select>
- </div>
+  const renderRewardList = () => (
+    <div className="space-y-4">
+      {enterpriseRewards.map(r => {
+        const proj = projects.find(p => p.id === r.project_id);
+        const team = projectTeams.find(t => p.id === r.team_id);
+        
+        return (
+          <div key={r.id} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-5 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {r.image_url ? (
+                <img src={r.image_url} alt="Reward" className="w-16 h-16 rounded-lg object-cover" />
+              ) : (
+                <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-lg flex items-center justify-center">
+                  <Gift className="w-8 h-8 text-[var(--text-secondary)]" />
+                </div>
+              )}
+              <div>
+                <h3 className="font-bold text-[var(--text-primary)] text-lg">{r.title}</h3>
+                <p className="text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                    r.status === 'Draft' ? 'bg-gray-100 text-gray-700' :
+                    r.status === 'Locked' ? 'bg-red-100 text-red-700' :
+                    r.status === 'Unlocked' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>
+                    {r.status}
+                  </span>
+                  • {proj?.name || 'No Project'} • {r.reward_type}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {r.status === 'Draft' && <button onClick={() => updateRewardStatus(r.id, 'Assigned')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">Assign</button>}
+              {r.status === 'Assigned' && <button onClick={() => updateRewardStatus(r.id, 'Locked')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700">Lock</button>}
+              {(r.status === 'Locked' || r.status === 'Ready for Unlock') && <button onClick={() => updateRewardStatus(r.id, 'Unlocked')} className="px-4 py-2 border border-[var(--border)] text-[var(--text-primary)] rounded-lg text-sm font-semibold hover:bg-[var(--bg-secondary)]"><Unlock className="w-4 h-4 inline mr-1" /> Force Unlock</button>}
+              <button onClick={() => updateRewardStatus(r.id, 'Archived')} className="p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] rounded-lg"><Archive className="w-5 h-5" /></button>
+            </div>
+          </div>
+        )
+      })}
+      {enterpriseRewards.length === 0 && (
+        <div className="text-center p-12 bg-[var(--surface)] border border-[var(--border)] rounded-xl text-[var(--text-secondary)]">
+          No rewards found in the enterprise workflow.
+        </div>
+      )}
+    </div>
+  );
 
- <div className="md:col-span-2">
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Description</label>
- <textarea className="w-full px-3 py-2 border h-24" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
- </div>
+  const renderApprovalChecklist = () => {
+    // Show only locked or ready for unlock
+    const pendingRewards = enterpriseRewards.filter(r => ['Locked', 'Ready for Unlock'].includes(r.status));
+    
+    return (
+      <div className="space-y-6">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">Reward Approval Dashboard</h2>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {pendingRewards.map(r => {
+            const teamTasks = tasks.filter(t => t.team_id === r.team_id);
+            const allTasksDone = teamTasks.length > 0 && teamTasks.every(t => t.status === 'Completed');
+            // Simplified check for module submission assuming latest module for that team
+            const teamModule = projectModules.find(m => m.project_id === r.project_id);
+            const moduleDone = teamModule ? teamModule.status === 'Completed' : false;
+            
+            return (
+              <div key={r.id} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-bold text-lg text-[var(--text-primary)]">{r.title}</h3>
+                    <p className="text-sm text-[var(--text-secondary)]">Team ID: {r.team_id}</p>
+                  </div>
+                  <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">{r.status}</span>
+                </div>
+                
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center gap-3">
+                    {allTasksDone ? <CheckSquare className="w-5 h-5 text-emerald-500" /> : <div className="w-5 h-5 border-2 border-[var(--border)] rounded" />}
+                    <span className="text-sm text-[var(--text-primary)]">All employee tasks approved</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {moduleDone ? <CheckSquare className="w-5 h-5 text-emerald-500" /> : <div className="w-5 h-5 border-2 border-[var(--border)] rounded" />}
+                    <span className="text-sm text-[var(--text-primary)]">Module reached 100% completion</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-[var(--border)] rounded" />
+                    <span className="text-sm text-[var(--text-primary)]">TL Final Module Report submitted</span>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => updateRewardStatus(r.id, 'Unlocked')}
+                  disabled={!allTasksDone || loading}
+                  className={`w-full py-2 rounded-lg font-semibold text-sm transition-colors ${
+                    allTasksDone ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] cursor-not-allowed'
+                  }`}
+                >
+                  Approve & Unlock Reward
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    );
+  };
 
- {formData.reward_type === 'Premium' && (
- <div className="md:col-span-2 bg-amber-50 border border-amber-200 p-6">
- <h3 className="text-sm font-bold text-amber-900 mb-6">Premium Settings</h3>
- <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
- <div>
- <label className="block text-sm font-bold text-amber-900 mb-1">Custom Image (JPG/PNG)</label>
- <input type="file" accept="image/*" className="w-full text-sm" onChange={e => setFormData({...formData, image_file: e.target.files[0]})} />
- </div>
- <div>
- <label className="block text-sm font-bold text-amber-900 mb-1">Custom Rule</label>
- <select className="w-full px-3 py-2 border bg-white" onChange={e => setFormData({...formData, rules: [...formData.rules, e.target.value]})}>
- <option value="">Add a rule...</option>
- <option value="Top Performer">Top Performer</option>
- <option value="No Overdue Tasks">No Overdue Tasks</option>
- <option value="Manager Approval Required">Manager Approval Required</option>
- </select>
- {formData.rules.length > 0 && (
- <div className="flex flex-wrap gap-2 mt-2">
- {formData.rules.map((r, i) => (
- <span key={i} className="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded flex items-center gap-1">
- {r} <button type="button" onClick={() => setFormData({...formData, rules: formData.rules.filter((_, idx) => idx !== i)})}><X className="w-3 h-3"/></button>
- </span>
- ))}
- </div>
- )}
- </div>
- </div>
- </div>
- )}
+  return (
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+      
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+            <Crown className="w-6 h-6 text-brand-600" />
+            Enterprise Rewards Workflow
+          </h1>
+          <p className="text-[var(--text-secondary)] text-sm mt-1">
+            Manage lifecycle, approvals, and distribution of project rewards.
+          </p>
+        </div>
+        
+        <button 
+          onClick={() => setIsCreating(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold hover:bg-brand-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Create Reward
+        </button>
+      </div>
 
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Reward Start Date</label>
- <input type="date" required className="w-full px-3 py-2 border" value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} />
- </div>
- 
- <div>
- <label className="block text-sm font-bold text-[var(--text-primary)] mb-1">Claim Deadline</label>
- <input type="datetime-local" required className="w-full px-3 py-2 border" value={formData.deadline} onChange={e => setFormData({...formData, deadline: e.target.value})} />
- </div>
- </div>
- 
- <div className="flex justify-end pt-4 border-t">
- <button disabled={loading} type="submit" className="btn-primary">
- {loading ? 'Creating...' : 'Create Reward'}
- </button>
- </div>
- </form>
- </div>
- )}
+      {isCreating ? (
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
+          <div className="flex justify-between items-center mb-6 border-b border-[var(--border)] pb-4">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Create Enterprise Reward</h2>
+            <button onClick={() => setIsCreating(false)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><X className="w-5 h-5" /></button>
+          </div>
+          
+          <form onSubmit={handleCreateReward} className="space-y-6 max-w-4xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Reward Title</label>
+                <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500" placeholder="e.g., MacBook Pro" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Reward Type</label>
+                <select value={formData.reward_type} onChange={e => setFormData({...formData, reward_type: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500">
+                  <option>Weekly</option>
+                  <option>Milestone</option>
+                  <option>Grand Reward</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Description</label>
+                <textarea required rows="3" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Target Project</label>
+                <select required value={formData.project_id} onChange={e => setFormData({...formData, project_id: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500">
+                  <option value="">Select Project</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Target Team</label>
+                <select required value={formData.team_id} onChange={e => setFormData({...formData, team_id: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500">
+                  <option value="">Select Team</option>
+                  {projectTeams.filter(t => t.project_id === formData.project_id).map(t => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+                </select>
+              </div>
 
- {/* List Rewards */}
- {activeTab !== 'settings' && activeTab !== 'reviews' && (
- <div className="space-y-8">
- {teamRewards.filter(r => (activeTab === 'premium' ? r.reward_type === 'Premium' : r.reward_type !== 'Premium')).map(reward => {
- const progress = getTeamProgress(reward.team_name, reward.project_id);
- const isUnlocked = reward.status === 'Unlocked';
- const projName = projects.find(p => p.id === reward.project_id)?.name || 'General';
- 
- return (
- <div key={reward.id} className="bg-white border border-[var(--border)] overflow-hidden flex flex-col">
- {/* Header */}
- <div className={`p-6 flex justify-between items-start ${isUnlocked ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white' : 'bg-[var(--bg-secondary)] border-b border-[var(--border)]'}`}>
- <div className="flex gap-6">
- {reward.image_url ? (
- <img src={reward.image_url} alt="Reward" className="w-20 h-20 object-cover bg-white p-1" />
- ) : (
- <div className={`w-20 h-20 flex items-center justify-center ${isUnlocked ? 'bg-white/20 text-[var(--text-primary)]' : 'bg-[var(--bg-secondary)] text-[var(--text-primary)]'}`}>
- {reward.reward_type === 'Premium' ? <Crown className="w-8 h-8" /> : <Gift className="w-8 h-8" />}
- </div>
- )}
- <div>
- <div className="flex items-center gap-2 mb-1">
- <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isUnlocked ? 'bg-white/20 text-[var(--text-primary)]' : 'bg-[var(--bg-secondary)] text-[var(--text-primary)]'}`}>{projName}</span>
- <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isUnlocked ? 'bg-emerald-400 text-white' : 'bg-[var(--surface-hover)] text-[var(--text-secondary)]'}`}>{reward.status}</span>
- </div>
- <h3 className={`text-2xl font-extrabold ${isUnlocked ? 'text-[var(--text-primary)]' : 'text-[var(--text-primary)]'}`}>{reward.title}</h3>
- <p className={`text-sm max-w-xl mt-1 ${isUnlocked ? 'text-emerald-50' : 'text-[var(--text-secondary)]'}`}>{reward.description}</p>
- </div>
- </div>
- <button onClick={() => handleDelete(reward.id)} className={`text-sm font-bold ${isUnlocked ? 'text-white hover:text-emerald-200' : 'text-red-500 hover:text-red-700'}`}>Delete</button>
- </div>
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Upload Reward Image (Supabase Storage)</label>
+                <input type="file" accept="image/*" onChange={e => setFormData({...formData, image_file: e.target.files[0]})} className="w-full text-sm text-[var(--text-secondary)] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100" />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">Expiry Date</label>
+                <input type="date" value={formData.expiry_date} onChange={e => setFormData({...formData, expiry_date: e.target.value})} className="w-full px-4 py-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-brand-500" />
+              </div>
+            </div>
+            
+            <div className="flex justify-end pt-6 border-t border-[var(--border)]">
+              <button disabled={loading} type="submit" className="px-6 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold hover:bg-brand-700">
+                {loading ? 'Creating...' : 'Create Reward'}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-1 bg-[var(--surface)] border border-[var(--border)] p-1 rounded-xl w-fit mb-6">
+            <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>Dashboard</button>
+            <button onClick={() => setActiveTab('list')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'list' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>Reward List</button>
+            <button onClick={() => setActiveTab('approvals')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'approvals' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>Approval Dashboard</button>
+          </div>
 
- {/* Progress Grid */}
- <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
- {/* Progress Summary */}
- <div className="col-span-1 lg:col-span-3 mb-2">
- <h4 className="font-bold text-[var(--text-primary)] mb-6 flex items-center gap-2"><Target className="w-5 h-5 text-[var(--text-primary)]" /> Overall Progress</h4>
- <div className="flex items-end justify-between mb-2">
- <div className="text-3xl font-extrabold text-[var(--text-primary)]">{progress.completed.length} <span className="text-[var(--text-secondary)] text-xl">/ {progress.totalMembers}</span> <span className="text-sm font-bold text-[var(--text-secondary)] ml-2">Members Completed</span></div>
- <div className="section-title">{progress.percentage}%</div>
- </div>
- <div className="w-full h-3 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
- <div className={`h-full transition-all duration-1000 ${isUnlocked ? 'bg-emerald-500' : 'bg-[var(--bg-secondary)]0'}`} style={{ width: `${progress.percentage}%` }}></div>
- </div>
- </div>
-
- {/* Completed Members */}
- <div className="col-span-1 lg:col-span-1 border border-emerald-100 bg-emerald-50/30 p-6">
- <h4 className="font-bold text-emerald-900 mb-6 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Completed Members</h4>
- {progress.completed.length === 0 ? <p className="text-sm text-[var(--text-secondary)] italic">No members have completed yet.</p> : (
- <div className="space-y-3">
- {progress.completed.map(m => (
- <div key={m.id} className="flex items-center gap-3 bg-white p-2 border border-emerald-100">
- <div className="w-8 h-8 rounded-full badge-completed flex items-center justify-center font-bold text-xs">{m.name.charAt(0)}</div>
- <div>
- <p className="text-sm font-bold text-[var(--text-primary)]">{m.name}</p>
- <p className="text-[10px] text-emerald-600 font-bold uppercase">{m.taskCount} Tasks Approved</p>
- </div>
- </div>
- ))}
- </div>
- )}
- </div>
-
- {/* Pending Members */}
- <div className="col-span-1 lg:col-span-2 border border-[var(--border)] bg-[var(--bg-secondary)] p-6">
- <h4 className="font-bold text-[var(--text-primary)] mb-6 flex items-center gap-2"><Users className="w-4 h-4 text-[var(--text-secondary)]" /> Pending Members</h4>
- {progress.pending.length === 0 ? <p className="text-sm text-[var(--text-secondary)] italic">Everyone has completed their tasks!</p> : (
- <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
- {progress.pending.map(m => (
- <div key={m.id} className="flex items-center gap-3 bg-white p-3 border border-[var(--border)]">
- <div className="w-8 h-8 rounded-full bg-[var(--surface-hover)] text-[var(--text-secondary)] flex items-center justify-center font-bold text-xs">{m.name.charAt(0)}</div>
- <div className="flex-1">
- <p className="text-sm font-bold text-[var(--text-primary)]">{m.name}</p>
- <div className="flex justify-between items-center mt-1">
- <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold uppercase">{m.remainingTasks} Tasks Left</span>
- <span className="text-[10px] text-[var(--text-secondary)]">{m.status}</span>
- </div>
- </div>
- </div>
- ))}
- </div>
- )}
- </div>
-
- </div>
- </div>
- );
- })}
- </div>
- )}
- </div>
- );
+          {activeTab === 'dashboard' && renderDashboard()}
+          {activeTab === 'list' && renderRewardList()}
+          {activeTab === 'approvals' && renderApprovalChecklist()}
+        </>
+      )}
+    </div>
+  );
 }
-
-
-
-
-
-
-
-

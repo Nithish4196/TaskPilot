@@ -1,7 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
  LayoutDashboard, CheckSquare, Folders, FileText,
- Calendar, Bell, Award, FileStack, Settings, LogOut, Briefcase, User, Activity, Archive, Moon, Sun
+ Calendar as CalendarIcon, Bell, Award, FileStack, Settings, LogOut, Briefcase, User, Activity, Archive, Moon, Sun, Crown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
@@ -16,7 +16,7 @@ const EmployeeLayout = () => {
  { name: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
  { name: 'My Tasks', path: '/employee/tasks', icon: CheckSquare },
  { name: 'My Projects', path: '/employee/projects', icon: Folders },
- { name: 'Calendar', path: '/employee/calendar', icon: Calendar },
+ { name: 'Calendar', path: '/employee/calendar', icon: CalendarIcon },
  { name: 'Notifications', path: '/employee/notifications', icon: Bell },
  { name: 'Performance', path: '/employee/performance', icon: Activity },
  { name: 'Feedback', path: '/employee/feedback', icon: Award },
@@ -73,6 +73,27 @@ const EmployeeLayout = () => {
  <Briefcase className={`w-[18px] h-[18px] ${location.pathname.startsWith('/employee/team-leader') ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname.startsWith('/employee/team-leader') ? 2.5 : 2} />
  Task Management
  </Link>
+ <Link
+ to="/employee/calendar"
+ className={`flex items-center gap-3 px-3 h-[44px] text-[15px] rounded-[10px] transition-colors duration-150 ${location.pathname === '/employee/calendar'
+ ? 'bg-[#111111] text-[#FFFFFF] font-[500]'
+ : 'text-[var(--text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--text-primary)]'
+ }`}
+ >
+ <CalendarIcon className={`w-[18px] h-[18px] ${location.pathname === '/employee/calendar' ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname === '/employee/calendar' ? 2.5 : 2} />
+ Calendar
+ </Link>
+ <Link
+ to="/employee/team-rewards"
+ className={`flex items-center gap-3 px-3 h-[44px] text-[15px] rounded-[10px] transition-colors duration-150 ${location.pathname.startsWith('/employee/team-rewards')
+ ? 'bg-[#111111] text-[#FFFFFF] font-[500]'
+ : 'text-[var(--text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--text-primary)]'
+ }`}
+ >
+ <Crown className={`w-[18px] h-[18px] ${location.pathname.startsWith('/employee/team-rewards') ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname.startsWith('/employee/team-rewards') ? 2.5 : 2} />
+ Team Rewards
+ </Link>
+
  </>
  )}
 

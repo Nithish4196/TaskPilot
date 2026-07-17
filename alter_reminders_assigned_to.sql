@@ -1,0 +1,1 @@
+ALTER TABLE public.reminders ADD COLUMN IF NOT EXISTS assigned_to uuid REFERENCES public.employees(id) ON DELETE CASCADE;

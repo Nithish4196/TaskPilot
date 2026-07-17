@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Briefcase, LayoutGrid, Users, CheckCircle, Clock, AlertTriangle, Plus, ChevronRight, MessageSquare, Target, Send, Star, FileText, Play } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
+import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 export default function TeamLeaderWorkspace() {
  const { currentUser, isTeamLeader, projectTeams, projectModules, tasks, employees, getEmployeeWorkload, dailyWorkSubmissions, taskDeliverables, fetchGlobalData, triggerNotification } = useAppContext();

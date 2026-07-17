@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, UserPlus, Settings, LogOut, Gift, BarChart3, Archive, Trophy, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar as CalendarIcon, UserPlus, Settings, LogOut, Gift, BarChart3, Archive, Trophy, Moon, Sun } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
 const ManagerLayout = () => {
@@ -10,7 +10,8 @@ const ManagerLayout = () => {
  const navItems = [
  { name: 'Dashboard', path: '/', icon: LayoutDashboard },
  { name: 'Employees', path: '/employees', icon: Users },
- { name: 'Reports & Analytics', path: '/reports', icon: BarChart3 },
+ { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
+  { name: 'Reports & Analytics', path: '/reports', icon: BarChart3 },
  { name: 'Completed Projects', path: '/completed-projects', icon: Archive },
  { name: 'Leaderboard', path: '/leaderboard', icon: Trophy },
  { name: 'Weekend Rewards', path: '/manager/rewards', icon: Gift },

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, ExternalLink, FolderKanban, Users, Activity, CheckCircle2, Calendar, LayoutGrid, AlertTriangle, FileText, Send, Star, Target } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
+import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 const ManagerDashboard = () => {
  const navigate = useNavigate();

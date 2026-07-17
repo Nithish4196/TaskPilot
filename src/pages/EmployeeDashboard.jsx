@@ -4,6 +4,7 @@ import {
  FolderGit2, Clock3, Bell, Activity
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 export default function EmployeeDashboard() {
  const { currentUser, tasks, getEmployeeActiveProjects } = useAppContext();
@@ -124,7 +125,12 @@ export default function EmployeeDashboard() {
  </div>
  </div>
 
- {/* Quick Actions (Placeholder for Phase 2) */}
+ 
+      {/* Dynamic Main Content Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Quick Actions (Placeholder for Phase 2) */}
+
  <div className="linear-card p-8 shadow-none text-center">
  <h3 className="card-title mb-2">Ready to start your day?</h3>
  <p className="text-[var(--text-secondary)] mb-6">Check your tasks or submit your daily update.</p>
@@ -136,6 +142,11 @@ export default function EmployeeDashboard() {
  Submit Daily Update
  </button>
  </div>
+ </div>
+ </div>
+ </div>
+ <div className="lg:col-span-1 h-[400px]">
+  <TodaysScheduleWidget />
  </div>
  </div>
  );
