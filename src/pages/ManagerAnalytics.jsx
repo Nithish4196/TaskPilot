@@ -113,7 +113,7 @@ export default function ManagerAnalytics() {
       }
       
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
       
       const prompt = `
         You are an Enterprise Analytics AI for Taskpilot. Analyze the following live organization metrics and provide 3-4 concise, actionable bullet points highlighting risks, bottlenecks, or top performers.

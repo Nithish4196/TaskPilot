@@ -22,7 +22,7 @@ export default function EmployeeRewards() {
 
   // Filter rewards assigned to those teams
   const myRewards = useMemo(() => {
-    return enterpriseRewards.filter(r => myTeamIds.includes(r.team_id));
+    return enterpriseRewards.filter(r => r.team_ids?.some(id => myTeamIds.includes(id)));
   }, [enterpriseRewards, myTeamIds]);
 
   const handleClaim = async (rewardId) => {

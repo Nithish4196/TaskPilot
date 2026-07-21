@@ -19,7 +19,7 @@ export default function TeamLeaderRewards() {
 
   // Filter rewards assigned to those teams
   const teamRewards = useMemo(() => {
-    return enterpriseRewards.filter(r => myTeamIds.includes(r.team_id));
+    return enterpriseRewards.filter(r => r.team_ids?.some(id => myTeamIds.includes(id)));
   }, [enterpriseRewards, myTeamIds]);
 
   return (
@@ -36,8 +36,8 @@ export default function TeamLeaderRewards() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teamRewards.map(r => {
-          const team = myTeams.find(t => t.id === r.team_id);
-          const eligibleCount = team?.team_members?.length || 0;
+          const assignedTeams = myTeams.filter(t => r.team_ids?.includes(t.id));
+          const eligibleCount = assignedTeams.reduce((acc, t) => acc + (t.team_members?.length || 0), 0);
           
           return (
             <div key={r.id} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden hover:shadow-md transition-all flex flex-col">
@@ -65,7 +65,7 @@ export default function TeamLeaderRewards() {
                 <div className="space-y-3 pt-4 border-t border-[var(--border)]">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-[var(--text-secondary)] flex items-center gap-2"><Users className="w-4 h-4" /> Team</span>
-                    <span className="font-semibold text-[var(--text-primary)]">{team?.team_name}</span>
+                    <span className="font-semibold text-[var(--text-primary)]">{assignedTeams.map(t => t.name || t.team_name).join(', ')}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-[var(--text-secondary)] flex items-center gap-2"><Clock className="w-4 h-4" /> Expiry</span>

@@ -1,17 +1,18 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { Folders, Users, Calendar, Activity, ArrowRight, ArrowLeft, Loader2, Archive, Star } from 'lucide-react';
 
 export default function EmployeeProjects() {
+ const navigate = useNavigate();
  const { employeeProjects, projects, projectTeams, currentUser, projectRatings } = useAppContext();
  const [activeTab, setActiveTab] = useState('active'); // 'active' or 'completed'
 
+ // Filter for active projects
+ const activeProjects = employeeProjects.filter(p => p.status !== 'Completed');
+
  // Filter for completed projects
- const completedProjects = projects.filter(p => {
- if (p.status !== 'Completed') return false;
- const teamsInProject = projectTeams.filter(t => t.project_id === p.id);
- return teamsInProject.some(t => t.team_leader_id === currentUser?.id || t.team_members?.includes(currentUser?.id));
- });
+ const completedProjects = employeeProjects.filter(p => p.status === 'Completed');
 
  return (
  <div className="max-w-7xl mx-auto pb-24 animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -29,7 +30,7 @@ export default function EmployeeProjects() {
  activeTab === 'active' ? 'bg-[var(--btn-primary-bg)] text-[var(--btn-primary-text)] ' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
  }`}
  >
- Active Projects ({employeeProjects.length})
+ Active Projects ({activeProjects.length})
  </button>
  <button
  onClick={() => setActiveTab('completed')}
@@ -42,7 +43,7 @@ export default function EmployeeProjects() {
  </div>
 
  {activeTab === 'active' && (
- employeeProjects.length === 0 ? (
+ activeProjects.length === 0 ? (
  <div className="linear-card p-12 text-center max-w-2xl mx-auto mt-12">
  <div className="w-20 h-20 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-full flex items-center justify-center mx-auto mb-6">
  <Folders className="w-10 h-10 text-[var(--text-secondary)]" />
@@ -52,8 +53,8 @@ export default function EmployeeProjects() {
  </div>
  ) : (
  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
- {employeeProjects.map(project => (
- <div key={project.id} className="linear-card hover:border-[var(--border)] transition-all overflow-hidden flex flex-col">
+ {activeProjects.map(project => (
+ <div key={project.id} onClick={() => navigate(`/employee/projects/${project.id}`)} className="linear-card cursor-pointer hover:border-[var(--border)] transition-all overflow-hidden flex flex-col">
  <div className="p-6 border-b border-[var(--border)] flex-1">
  <div className="flex justify-between items-start mb-6">
  <div className="w-12 h-12 bg-[var(--bg-secondary)] border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)] font-bold text-xl">
@@ -115,7 +116,7 @@ export default function EmployeeProjects() {
  : null;
 
  return (
- <div key={project.id} className="linear-card transition-colors hover:border-[var(--border)] overflow-hidden flex flex-col">
+ <div key={project.id} onClick={() => navigate(`/employee/projects/${project.id}`)} className="linear-card cursor-pointer transition-colors hover:border-[var(--border)] overflow-hidden flex flex-col">
  <div className="p-6 flex-1">
  <div className="flex justify-between items-start mb-6">
  <span className="bg-[var(--bg-secondary)] border border-[#2A2A2A] text-[var(--text-primary)] text-[10px] font-semibold px-3 py-1 rounded-full uppercase tracking-wider">

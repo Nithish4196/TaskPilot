@@ -3,7 +3,7 @@ import { useParams, Link, Navigate } from 'react-router-dom';
 import { 
  ArrowLeft, LayoutGrid, Users, Plus, CheckCircle2, AlertCircle, 
  BarChart3, Activity, Clock, Award, ShieldCheck, Mail, Building2, 
- Settings, Target, ChevronDown, ChevronRight, MessageSquare, Briefcase, Calendar, ListTodo
+ Settings, Target, ChevronDown, ChevronRight, MessageSquare, Briefcase, Calendar, ListTodo, Flag, FileText, Star
 } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
 

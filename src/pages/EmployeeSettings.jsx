@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Settings, Shield, Bell, Moon, Sun, Smartphone, MonitorSmartphone, Key } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function EmployeeSettings() {
  const { currentUser } = useAppContext();
+ const { preferences, updatePreferences } = useNotifications();
  const [activeTab, setActiveTab] = useState('security');
 
  return (
@@ -77,13 +79,14 @@ export default function EmployeeSettings() {
 
  {activeTab === 'notifications' && (
  <div className="linear-card p-6 space-y-6">
- <h2 className="card-title mb-6">Email Notifications</h2>
+ <h2 className="card-title mb-6">Notification Preferences</h2>
  
  {[
- { title: 'New Task Assignments', desc: 'Receive an email when you are assigned a new task.' },
- { title: 'Task Deadline Approaching', desc: 'Get reminded 24 hours before a task is due.' },
- { title: 'Manager Comments', desc: 'Get notified when a manager comments on your updates.' },
- { title: 'Company Announcements', desc: 'Important news and policy changes from HR.' },
+ { id: 'enable_in_app', title: 'In-App Notifications', desc: 'Receive real-time notifications in the top bell icon.' },
+ { id: 'enable_email', title: 'Email Notifications', desc: 'Receive an email digest for important updates.' },
+ { id: 'daily_reminder', title: 'Daily Submission Reminders', desc: 'Get reminded to submit your daily updates.' },
+ { id: 'reward_alerts', title: 'Reward Alerts', desc: 'Get notified when new rewards are unlocked.' },
+ { id: 'calendar_alerts', title: 'Calendar Alerts', desc: 'Reminders for your scheduled events and meetings.' },
  ].map((item, idx) => (
  <div key={idx} className="flex items-center justify-between py-3 border-b border-[var(--border)] last:border-0">
  <div>
@@ -91,7 +94,12 @@ export default function EmployeeSettings() {
  <p className="text-sm text-[var(--text-secondary)]">{item.desc}</p>
  </div>
  <label className="relative inline-flex items-center cursor-pointer">
- <input type="checkbox" className="sr-only peer" defaultChecked />
+ <input 
+  type="checkbox" 
+  className="sr-only peer" 
+  checked={preferences?.[item.id] ?? true} 
+  onChange={(e) => updatePreferences({ [item.id]: e.target.checked })} 
+ />
  <div className="w-11 h-6 bg-[#2A2A2A] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-black after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--btn-primary-bg)]"></div>
  </label>
  </div>

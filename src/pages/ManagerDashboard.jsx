@@ -6,7 +6,7 @@ import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 const ManagerDashboard = () => {
  const navigate = useNavigate();
- const { currentUser, projects, employees, tasks, projectModules, dailyTeamReports, moduleSubmissions, projectTeams, fetchGlobalData, triggerNotification } = useAppContext();
+ const { currentUser, projects, employees, tasks, projectModules, dailyTeamReports, moduleSubmissions, projectTeams, fetchGlobalData, triggerNotification, taskDeliverables } = useAppContext();
  
  const [activeTab, setActiveTab] = useState('overview'); // overview, reports, modules
 
@@ -41,6 +41,12 @@ const ManagerDashboard = () => {
  // Notify TL
  triggerNotification(sub.submitted_by, 'Module Approved', `The Manager has approved your module!`, 'module_approved', sub.module_id);
  
+ // Enterprise Reward Sync: Module Approved -> Ready To Unlock
+ await supabase.from('enterprise_rewards')
+   .update({ status: 'Ready To Unlock' })
+   .contains('module_ids', [sub.module_id])
+   .eq('status', 'Waiting for Manager Approval');
+
  alert('Module approved successfully.');
  fetchGlobalData();
  } catch (err) {
@@ -187,7 +193,7 @@ const ManagerDashboard = () => {
  {dailyTeamReports.map(report => {
  const proj = projects.find(p => p.id === report.project_id);
  const team = projectTeams.find(t => t.id === report.team_id);
- const tl = employees.find(e => e.id === report.submitted_by);
+ const tl = employees.find(e => e.id === report.tl_id);
  
  return (
  <div key={report.id} className="linear-card p-6">
@@ -197,12 +203,12 @@ const ManagerDashboard = () => {
  <p className="text-xs font-medium text-[var(--text-secondary)] mt-1">{team?.team_name}</p>
  </div>
  <span className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1">
- <Calendar className="w-3.5 h-3.5"/> {new Date(report.created_at).toLocaleDateString()}
+ <Calendar className="w-3.5 h-3.5"/> {new Date(report.report_date || report.created_at).toLocaleDateString()}
  </span>
  </div>
  
  <div className="linear-card p-6 mb-6">
- <p className="text-sm text-[var(--text-secondary)] italic">"{report.summary}"</p>
+ <p className="text-sm text-[var(--text-secondary)] italic">"{report.team_productivity || report.planned_work_tomorrow || 'No details provided.'}"</p>
  </div>
 
  <div className="flex justify-between items-center pt-4 border-t border-[var(--border)]">
@@ -250,6 +256,37 @@ const ManagerDashboard = () => {
  <div className="linear-card p-6 mb-6">
  <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase mb-2">Module Details</p>
  <p className="text-sm text-[var(--text-primary)] leading-relaxed">{mod?.description}</p>
+ 
+ {(() => {
+   const modTasks = tasks.filter(t => t.module_id === sub.module_id);
+   const modTaskIds = modTasks.map(t => t.id);
+   const modDeliverables = (taskDeliverables || []).filter(d => modTaskIds.includes(d.task_id));
+   
+   if (modDeliverables.length === 0) return null;
+   
+   return (
+     <div className="mt-4 pt-4 border-t border-[var(--border)]">
+       <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-3">Module Deliverables</p>
+       <div className="space-y-4">
+         {modDeliverables.map(d => {
+           const task = modTasks.find(t => t.id === d.task_id);
+           const emp = employees.find(e => e.id === d.employee_id);
+           return (
+             <div key={d.id} className="bg-[var(--bg-secondary)] p-3 rounded border border-amber-500/20">
+               <p className="font-semibold text-xs text-[var(--text-primary)] mb-1">{task?.name} <span className="opacity-70 font-normal">(by {emp?.name || 'Unknown'})</span></p>
+               <p className="text-[11px] text-[var(--text-secondary)] whitespace-pre-wrap break-words">{d.description}</p>
+               {d.link_url && d.link_url !== 'N/A' && !d.link_url.includes('Final Deliverables:') && (
+                 <a href={d.link_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-[11px] mt-2 block break-all font-medium">
+                   🔗 Main Link: {d.link_url}
+                 </a>
+               )}
+             </div>
+           );
+         })}
+       </div>
+     </div>
+   );
+ })()}
  </div>
 
  <div className="flex items-center justify-between mb-6">

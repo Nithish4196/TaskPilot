@@ -5,7 +5,11 @@ import { useAppContext, supabase } from '../context/AppContext';
 import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 export default function TeamLeaderWorkspace() {
- const { currentUser, isTeamLeader, projectTeams, projectModules, tasks, employees, getEmployeeWorkload, dailyWorkSubmissions, taskDeliverables, fetchGlobalData, triggerNotification } = useAppContext();
+ const { 
+   currentUser, isTeamLeader, projectTeams, projectModules, tasks, employees, 
+   getEmployeeWorkload, dailyWorkSubmissions, taskDeliverables, fetchGlobalData, 
+   triggerNotification, moduleSubmissions, dailyTeamReports, finalTeamReports, projects 
+ } = useAppContext();
  
  if (!currentUser || !isTeamLeader(currentUser.id)) {
  return <Navigate to="/employee/dashboard" />;
@@ -25,7 +29,29 @@ export default function TeamLeaderWorkspace() {
  const pendingFinalReviews = allMyTeamTasks.filter(t => t.status === 'Under Final Review');
  const completedTasks = teamTasks.filter(t => t.status === 'Completed' || t.status === 'Approved');
 
- const [activeTab, setActiveTab] = useState('modules'); // modules, reviews, report, feedback
+ const [activeTab, setActiveTab] = useState('modules'); // modules, reviews, report, feedback, submissions
+ const [submissionLogTab, setSubmissionLogTab] = useState('employee_to_tl'); // 'employee_to_tl', 'tl_to_manager'
+ const [submissionLogFilter, setSubmissionLogFilter] = useState('daily'); // 'daily', 'final' (for employee_to_tl)
+ const [expandedSubId, setExpandedSubId] = useState(null);
+
+ // --- Submissions Data Derivation ---
+ const tlEmployeeIds = new Set();
+ myTeams.forEach(t => { (t.team_members || []).forEach(m => tlEmployeeIds.add(m)); });
+ 
+ const teamDailyUpdates = dailyWorkSubmissions
+   .filter(s => tlEmployeeIds.has(s.employee_id))
+   .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+   
+ const teamDeliverables = taskDeliverables
+   .filter(d => tlEmployeeIds.has(d.employee_id))
+   .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+ const myManagerSubmissions = [
+   ...(moduleSubmissions || []).filter(s => s.tl_id === currentUser.id || s.submitted_by === currentUser.id).map(s => ({ ...s, submission_type: 'Final Module Submission', display_date: s.submitted_at || s.created_at })),
+   ...(dailyTeamReports || []).filter(s => s.tl_id === currentUser.id || s.submitted_by === currentUser.id).map(s => ({ ...s, submission_type: 'Daily Update', display_date: s.created_at })),
+   ...(finalTeamReports || []).filter(s => s.tl_id === currentUser.id).map(s => ({ ...s, submission_type: 'Final Project Report', display_date: s.submitted_at || s.created_at }))
+ ].sort((a, b) => new Date(b.display_date) - new Date(a.display_date));
+ // ------------------------------------
 
  const allModulesApproved = teamModules.length > 0 && teamModules.every(m => m.manager_approved === true);
  const [showFinalReportModal, setShowFinalReportModal] = useState(false);
@@ -53,6 +79,16 @@ export default function TeamLeaderWorkspace() {
  const [finalReviewRating, setFinalReviewRating] = useState(5);
  const [finalReviewQuality, setFinalReviewQuality] = useState(100);
  const [finalReviewSuggestions, setFinalReviewSuggestions] = useState('');
+
+ // Module Submit State
+ const [showModuleSubmitModal, setShowModuleSubmitModal] = useState(false);
+ const [selectedModuleForSubmit, setSelectedModuleForSubmit] = useState(null);
+ const [moduleSubmitNotes, setModuleSubmitNotes] = useState('');
+ const [moduleSubmitSourceUrl, setModuleSubmitSourceUrl] = useState('');
+ const [moduleSubmitFilesUrl, setModuleSubmitFilesUrl] = useState('');
+ const [moduleSubmitLiveUrl, setModuleSubmitLiveUrl] = useState('');
+ const [moduleSubmitTesting, setModuleSubmitTesting] = useState('');
+ const [moduleSubmitDeployment, setModuleSubmitDeployment] = useState('');
 
  // Daily Report State
  const [reportText, setReportText] = useState('');
@@ -91,6 +127,12 @@ export default function TeamLeaderWorkspace() {
  });
 
  triggerNotification(newTask.employee_id, 'New Task Assigned', `You have been assigned a new task: ${newTask.name}`, 'task_assigned', data.id);
+
+ // Enterprise Reward Sync: Lock the reward when a module starts getting tasks
+ await supabase.from('enterprise_rewards')
+   .update({ status: 'Locked' })
+   .contains('module_ids', [selectedModuleForTask.id])
+   .eq('status', 'Assigned');
 
  setShowTaskModal(false);
  setNewTask({ name: '', description: '', task_type: '', notes: '', employee_id: '', due_date: '', start_date: '', estimated_hours: 0, priority: 'Medium' });
@@ -154,7 +196,7 @@ export default function TeamLeaderWorkspace() {
  const nextTaskStatus = isApprove ? 'Completed' : 'In Progress';
  const nextTaskProgress = isApprove ? 100 : 99;
 
- await supabase.from('tasks').update({
+ const { error: updateError } = await supabase.from('tasks').update({
  status: nextTaskStatus,
  progress: nextTaskProgress,
  final_rating: isApprove ? finalReviewRating : null,
@@ -166,14 +208,18 @@ export default function TeamLeaderWorkspace() {
  approval_status: isApprove ? 'Approved' : 'Rejected'
  }).eq('id', task.id);
 
+ if (updateError) throw updateError;
+
  // History log
- await supabase.from('task_history').insert({
+ const { error: historyError } = await supabase.from('task_history').insert({
  task_id: task.id,
  performed_by: currentUser.id,
  action: `TL ${decision}d Final Task`,
  new_status: nextTaskStatus,
  comments: finalReviewFeedback || (isApprove ? 'Completed task approved!' : 'Task returned to In Progress.')
  });
+
+ if (historyError) throw historyError;
 
  // Notify employee
  triggerNotification(
@@ -193,6 +239,7 @@ export default function TeamLeaderWorkspace() {
  alert(`Task review submitted as ${decision}.`);
  } catch (err) {
  console.error('Error in final task review:', err);
+ alert('Failed to process task review: ' + (err.message || 'Unknown error'));
  }
  };
 
@@ -204,8 +251,9 @@ export default function TeamLeaderWorkspace() {
  await supabase.from('daily_team_reports').insert({
  project_id: teamModules[0]?.project_id, // Assume team belongs to a single project
  team_id: selectedTeamId,
- submitted_by: currentUser.id,
- summary: reportText
+ tl_id: currentUser.id,
+ team_productivity: reportText,
+ status: 'Pending Manager Review'
  });
 
  // Find manager and notify
@@ -224,17 +272,41 @@ export default function TeamLeaderWorkspace() {
  }
  };
 
- const submitModuleToManager = async (mod) => {
- if (!window.confirm(`Are you sure you want to submit the module"${mod.name}" for Manager review? This will lock the module.`)) return;
+ const openModuleSubmitModal = (mod) => {
+   setSelectedModuleForSubmit(mod);
+   setShowModuleSubmitModal(true);
+ };
+
+ const submitModuleToManager = async (e) => {
+ e.preventDefault();
+ const mod = selectedModuleForSubmit;
+ if (!mod) return;
+ 
  try {
  // Create module submission
- await supabase.from('module_submissions').insert({
- module_id: mod.id,
- project_id: mod.project_id,
- team_id: mod.team_id,
- submitted_by: currentUser.id,
- status: 'Pending Manager Review'
- });
+ const payload = {
+   module_id: mod.id,
+   project_id: mod.project_id,
+   tl_id: currentUser.id,
+   status: 'Under Manager Review',
+   tl_comments: moduleSubmitNotes,
+   deliverables: JSON.stringify({
+     source_code_url: moduleSubmitSourceUrl,
+     files_url: moduleSubmitFilesUrl,
+     live_url: moduleSubmitLiveUrl
+   }),
+   module_report: JSON.stringify({
+     testing_details: moduleSubmitTesting,
+     deployment_details: moduleSubmitDeployment
+   }),
+   completion_pct: 100
+ };
+ const { error } = await supabase.from('module_submissions').insert(payload);
+ if (error) {
+   console.error('Submission failed:', error);
+   alert('Failed to submit module: ' + error.message);
+   return;
+ }
 
  // Lock module
  await supabase.from('project_modules').update({
@@ -244,13 +316,27 @@ export default function TeamLeaderWorkspace() {
  // Find manager and notify
  const { data: proj } = await supabase.from('projects').select('manager_id').eq('id', mod.project_id).single();
  if (proj) {
- triggerNotification(proj.manager_id, 'Module Ready for Review', `Module"${mod.name}" has been submitted for final review.`, 'module_submitted', mod.id);
+ triggerNotification(proj.manager_id, 'Module Ready for Review', `Module "${mod.name}" has been submitted for final review.`, 'module_submitted', mod.id);
  }
 
+ // Enterprise Reward Sync: Progress reward status
+ await supabase.from('enterprise_rewards')
+   .update({ status: 'Waiting for Manager Approval' })
+   .contains('module_ids', [mod.id])
+   .eq('status', 'Locked');
+
+ setShowModuleSubmitModal(false);
+ setModuleSubmitNotes('');
+ setModuleSubmitSourceUrl('');
+ setModuleSubmitFilesUrl('');
+ setModuleSubmitLiveUrl('');
+ setModuleSubmitTesting('');
+ setModuleSubmitDeployment('');
  alert('Module submitted to Manager successfully!');
  fetchGlobalData();
  } catch (err) {
  console.error('Error submitting module:', err);
+ alert('Failed to submit module: ' + (err.message || 'Unknown error'));
  }
  };
 
@@ -358,7 +444,7 @@ export default function TeamLeaderWorkspace() {
  </div>
 
  <div className="flex gap-1 p-1 linear-card mb-10 overflow-x-auto w-full md:w-fit">
- {['modules', 'reviews', 'reports', 'feedback'].map(tab => (
+ {['modules', 'reviews', 'reports', 'feedback', 'submissions'].map(tab => (
  <button
  key={tab}
  onClick={() => setActiveTab(tab)}
@@ -436,129 +522,7 @@ export default function TeamLeaderWorkspace() {
   >
   <CheckCircle className="w-3.5 h-3.5" /> Submit to Manager
   </button>
-   {showFinalTaskReviewModal && selectedTaskForReview && (() => {
-  const emp = employees.find(e => e.id === selectedTaskForReview.employee_id);
-  const deliverable = taskDeliverables
-    .filter(d => d.task_id === selectedTaskForReview.id)
-    .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0];
-  return (
-  <div className="fixed inset-0 bg-[var(--surface)]/50 flex items-center justify-center p-6 z-50 transition-opacity">
-  <div className="linear-card max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-  <h2 className="section-title mb-1">Final Task Review</h2>
-  <p className="text-[var(--text-secondary)] text-sm mb-6 font-medium">Task: <span className="font-semibold text-[var(--text-primary)]">{selectedTaskForReview.name}</span> by {emp?.name}</p>
-  
-  <div className="space-y-6 mb-6">
-  <div className="linear-card p-6">
-  <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Description</p>
-  <p className="text-sm text-[var(--text-primary)]">{selectedTaskForReview.description || 'No description provided.'}</p>
-  
-  {deliverable && (
-    <div className="space-y-4 border-t border-[var(--border)] pt-4 mt-4 text-[11px] text-[var(--text-secondary)]">
-      <h3 className="font-semibold text-xs text-[var(--text-primary)] uppercase tracking-wider">Submitted Deliverables</h3>
-      <div>
-        <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Final Deliverables Description:</span>
-        <p className="text-xs text-[var(--text-primary)] mt-0.5">{deliverable.description}</p>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Source Code URL:</span>
-          {deliverable.source_code_url ? (
-            <a href={deliverable.source_code_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all mt-0.5 block">{deliverable.source_code_url}</a>
-          ) : (
-            <span className="text-[var(--text-primary)] block mt-0.5">Not provided</span>
-          )}
-        </div>
-        <div>
-          <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Files URL:</span>
-          {deliverable.files_url ? (
-            <a href={deliverable.files_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all mt-0.5 block">{deliverable.files_url}</a>
-          ) : (
-            <span className="text-[var(--text-primary)] block mt-0.5">None</span>
-          )}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Testing Details:</span>
-          <p className="text-[var(--text-primary)] mt-0.5 whitespace-pre-wrap">{deliverable.testing_details || 'Not provided'}</p>
-        </div>
-        <div>
-          <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Deployment Details:</span>
-          <p className="text-[var(--text-primary)] mt-0.5 whitespace-pre-wrap">{deliverable.deployment_details || 'Not provided'}</p>
-        </div>
-      </div>
-      {deliverable.final_notes && (
-        <div>
-          <span className="font-semibold uppercase tracking-wider block text-[10px] opacity-75">Final Notes:</span>
-          <p className="text-[var(--text-primary)] mt-0.5 whitespace-pre-wrap">{deliverable.final_notes}</p>
-        </div>
-      )}
-    </div>
-  )}
-  </div>
-  </div>
-
-  <form onSubmit={e => e.preventDefault()} className="space-y-4">
-  <div>
-  <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-2">Task Rating (1-5 Stars)</label>
-  <div className="flex gap-2">
-  {[1, 2, 3, 4, 5].map((num) => (
-  <button
-  type="button"
-  key={num}
-  onClick={() => setFinalReviewRating(num)}
-  className={`p-1 transition-colors duration-150 ${finalReviewRating >= num ? 'text-amber-500' : 'text-[var(--text-secondary)] opacity-30'}`}
-  >
-  <Star className="w-6 h-6 fill-current" />
-  </button>
-  ))}
-  </div>
-  </div>
-
-  <div>
-  <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Quality Score (1-100)</label>
-  <input 
-  type="number" 
-  min="1" 
-  max="100" 
-  className="linear-input" 
-  value={finalReviewQuality} 
-  onChange={e => setFinalReviewQuality(parseInt(e.target.value) || 100)} 
-  />
-  </div>
-
-  <div>
-  <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Detailed Feedback</label>
-  <textarea 
-  className="linear-input min-h-[80px] py-2" 
-  rows="3" 
-  value={finalReviewFeedback} 
-  onChange={e => setFinalReviewFeedback(e.target.value)} 
-  placeholder="Provide detailed feedback on this task..." 
-  />
-  </div>
-
-  <div>
-  <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Improvement Suggestions</label>
-  <textarea 
-  className="linear-input min-h-[80px] py-2" 
-  rows="3" 
-  value={finalReviewSuggestions} 
-  onChange={e => setFinalReviewSuggestions(e.target.value)} 
-  placeholder="Any suggestions for next time..." 
-  />
-  </div>
-
-  <div className="flex gap-2 justify-end pt-4 border-t border-[var(--border)] mt-6">
-  <button type="button" onClick={() => { setShowFinalTaskReviewModal(false); setFinalReviewFeedback(''); setFinalReviewSuggestions(''); }} className="px-4 py-2 text-sm text-[var(--text-secondary)] font-medium hover:bg-[var(--surface)] transition-colors duration-150">Cancel</button>
-  <button type="button" onClick={() => handleFinalTaskReview('Reject')} className="px-4 py-2 text-sm border border-[var(--border)] hover:border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] font-semibold transition-colors duration-150">Reject Task</button>
-  <button type="button" onClick={() => handleFinalTaskReview('Approve')} className="px-4 py-2 text-sm bg-[var(--btn-primary-bg)] hover:bg-[var(--btn-primary-hover)] text-[var(--btn-primary-text)] font-semibold transition-colors duration-150 border border-[var(--border)]">Approve Task</button>
-  </div>
-  </form>
-  </div>
-  </div>
-  );
-  })()}
+   
   </div>
   );
   })()}
@@ -660,12 +624,31 @@ export default function TeamLeaderWorkspace() {
  <p className="font-semibold text-[var(--text-primary)]">{task.name}</p>
  <span className="bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 rounded">100% Progress</span>
  </div>
- <p className="text-xs text-[var(--text-secondary)] mb-6 flex items-center gap-1"><Users className="w-3.5 h-3.5"/> Assigned to: {emp?.name || 'Unknown'}</p>
+ <p className="text-xs text-[var(--text-secondary)] mb-4 flex items-center gap-1"><Users className="w-3.5 h-3.5"/> Assigned to: {emp?.name || 'Unknown'}</p>
  
- <div className="linear-card p-3 mb-6">
- <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase mb-1">Description</p>
- <p className="text-sm text-[var(--text-primary)]">{task.description || 'No description provided.'}</p>
- </div>
+ {(() => {
+   const deliverable = (taskDeliverables || [])
+     .filter(d => d.task_id === task.id)
+     .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0];
+
+   return (
+     <div className="linear-card p-3 mb-6 bg-[var(--bg-secondary)] border border-amber-500/30">
+       <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-2">Submitted Deliverables</p>
+       {deliverable ? (
+         <div className="text-xs text-[var(--text-primary)] whitespace-pre-wrap break-words">
+           {deliverable.description}
+         </div>
+       ) : (
+         <p className="text-xs text-[var(--text-secondary)]">No final submission details found.</p>
+       )}
+       {deliverable?.link_url && deliverable.link_url !== 'N/A' && !deliverable.link_url.includes('Final Deliverables:') && (
+         <a href={deliverable.link_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs mt-3 block break-all font-medium">
+           🔗 Main Link: {deliverable.link_url}
+         </a>
+       )}
+     </div>
+   );
+ })()}
  </div>
  <button 
  onClick={() => { setSelectedTaskForReview(task); setShowFinalTaskReviewModal(true); }}
@@ -871,7 +854,40 @@ export default function TeamLeaderWorkspace() {
  })()}
  
  {/* Task Creation Modal omitted for brevity, it's mostly identical but preserved in earlier code block if needed, let me just add it so it works! */}
- {showTaskModal && (
+  {showFinalTaskReviewModal && selectedTaskForReview && (
+ <div className="fixed inset-0 bg-[var(--surface)]/50 flex items-center justify-center p-6 z-50 transition-opacity">
+ <div className="linear-card max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+ <h2 className="section-title mb-6">Final Task Review: {selectedTaskForReview.name}</h2>
+ <div className="space-y-4 mb-6">
+  <div>
+    <label className="block text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Feedback/Comments</label>
+    <textarea className="w-full px-3 py-2 linear-card text-[var(--text-primary)] text-sm" rows="3" value={finalReviewFeedback} onChange={(e) => setFinalReviewFeedback(e.target.value)}></textarea>
+  </div>
+  <div>
+    <label className="block text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Improvement Suggestions</label>
+    <textarea className="w-full px-3 py-2 linear-card text-[var(--text-primary)] text-sm" rows="3" value={finalReviewSuggestions} onChange={(e) => setFinalReviewSuggestions(e.target.value)}></textarea>
+  </div>
+  <div className="grid grid-cols-2 gap-4">
+    <div>
+      <label className="block text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Rating (1-5)</label>
+      <input type="number" min="1" max="5" className="w-full px-3 py-2 linear-card text-[var(--text-primary)] text-sm" value={finalReviewRating} onChange={(e) => setFinalReviewRating(e.target.value)} />
+    </div>
+    <div>
+      <label className="block text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Quality Score (0-100)</label>
+      <input type="number" min="0" max="100" className="w-full px-3 py-2 linear-card text-[var(--text-primary)] text-sm" value={finalReviewQuality} onChange={(e) => setFinalReviewQuality(e.target.value)} />
+    </div>
+  </div>
+ </div>
+ <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
+ <button type="button" onClick={() => { setShowFinalTaskReviewModal(false); setSelectedTaskForReview(null); setFinalReviewFeedback(''); setFinalReviewSuggestions(''); setFinalReviewRating(5); setFinalReviewQuality(100); }} className="px-4 py-2 text-sm text-[var(--text-secondary)] font-medium hover:bg-[var(--surface)] transition-colors duration-150">Cancel</button>
+ <button type="button" onClick={() => handleFinalTaskReview('Reject')} className="px-4 py-2 text-sm border border-[var(--border)] hover:border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-primary)] font-semibold transition-colors duration-150">Reject</button>
+ <button type="button" onClick={() => handleFinalTaskReview('Approve')} className="px-4 py-2 text-sm bg-[var(--btn-primary-bg)] hover:bg-[var(--btn-primary-hover)] text-[var(--btn-primary-text)] font-semibold transition-colors duration-150 border border-[var(--border)]">Approve</button>
+ </div>
+ </div>
+ </div>
+ )}
+
+{showTaskModal && (
  <div className="fixed inset-0 bg-[var(--bg-primary)]/50 flex items-center justify-center p-6 z-50 transition-opacity">
  <div className="linear-card max-w-2xl w-full p-6">
  <h2 className="section-title mb-6">Create Task</h2>
@@ -897,6 +913,157 @@ export default function TeamLeaderWorkspace() {
  </div>
  </div>
  )}
+
+ {activeTab === 'submissions' && (
+   <div className="space-y-6">
+     <div className="linear-card p-6 mb-6">
+       <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2 mb-1">
+         <FileText className="w-5 h-5 text-[var(--text-secondary)]" /> Submission Logs
+       </h2>
+       <p className="text-[var(--text-secondary)] text-sm mb-6">Track work submitted by your team and modules sent to management.</p>
+       
+       <div className="flex gap-2 p-1 bg-[var(--bg-secondary)] rounded-md w-fit border border-[var(--border)]">
+         <button 
+           onClick={() => setSubmissionLogTab('employee_to_tl')}
+           className={`px-4 py-1.5 text-sm font-medium rounded-sm transition-colors ${submissionLogTab === 'employee_to_tl' ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+         >
+           Employee Submissions
+         </button>
+         <button 
+           onClick={() => setSubmissionLogTab('tl_to_manager')}
+           className={`px-4 py-1.5 text-sm font-medium rounded-sm transition-colors ${submissionLogTab === 'tl_to_manager' ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+         >
+           My Submissions to Manager
+         </button>
+       </div>
+     </div>
+
+     {submissionLogTab === 'employee_to_tl' && (
+       <div className="space-y-4">
+         <div className="flex gap-4 border-b border-[var(--border)] pb-2">
+           <button onClick={() => setSubmissionLogFilter('daily')} className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${submissionLogFilter === 'daily' ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>Daily Updates ({teamDailyUpdates.length})</button>
+           <button onClick={() => setSubmissionLogFilter('final')} className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${submissionLogFilter === 'final' ? 'border-[var(--text-primary)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>Task Deliverables ({teamDeliverables.length})</button>
+         </div>
+
+         {submissionLogFilter === 'daily' && (
+           <div className="space-y-4">
+             {teamDailyUpdates.length === 0 ? <p className="text-sm text-[var(--text-secondary)] p-6 linear-card text-center">No daily updates found from your team.</p> : (
+               teamDailyUpdates.map(sub => {
+                 const task = tasks.find(t => t.id === sub.task_id);
+                 return (
+                   <div key={sub.id} className="linear-card p-4 border-l-4 border-l-blue-500">
+                     <div className="flex justify-between items-start mb-3">
+                       <div>
+                         <p className="font-semibold text-[var(--text-primary)]">{task?.name || 'Unknown Task'}</p>
+                         <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1 mt-1">
+                           <Clock className="w-3 h-3 text-blue-500" /> By {employees.find(e => e.id === sub.employee_id)?.name} at {formatStartedAt(sub.submitted_at)}
+                         </p>
+                       </div>
+                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                         {sub.progress_pct}% Progress
+                       </span>
+                     </div>
+                     <div className="bg-[var(--bg-secondary)] p-3 rounded border border-[var(--border)]">
+                       <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Work Notes</p>
+                       <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">{sub.work_notes}</p>
+                     </div>
+                     {sub.tl_comments && (
+                       <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                         <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-1">TL Feedback (Rating: {sub.rating}/5)</p>
+                         <p className="text-sm text-[var(--text-primary)]">{sub.tl_comments}</p>
+                       </div>
+                     )}
+                   </div>
+                 );
+               })
+             )}
+           </div>
+         )}
+
+         {submissionLogFilter === 'final' && (
+           <div className="space-y-4">
+             {teamDeliverables.length === 0 ? <p className="text-sm text-[var(--text-secondary)] p-6 linear-card text-center">No task deliverables found from your team.</p> : (
+               teamDeliverables.map(sub => {
+                 const task = tasks.find(t => t.id === sub.task_id);
+                 return (
+                   <div key={sub.id} className="linear-card p-4 border-l-4 border-l-green-500">
+                     <div className="flex justify-between items-start mb-3">
+                       <div>
+                         <p className="font-semibold text-[var(--text-primary)]">{task?.name || 'Unknown Task'}</p>
+                         <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1 mt-1">
+                           <CheckCircle className="w-3 h-3 text-green-500" /> Submitted by {employees.find(e => e.id === sub.employee_id)?.name} at {formatStartedAt(sub.submitted_at)}
+                         </p>
+                       </div>
+                       <span className="text-[10px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider bg-green-500/10 text-green-500 border border-green-500/20">
+                         Final Submission
+                       </span>
+                     </div>
+                     <div className="bg-[var(--bg-secondary)] p-3 rounded border border-green-500/30">
+                       <p className="text-[10px] font-semibold text-green-500 uppercase tracking-wider mb-1">Deliverable Details</p>
+                       <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">{sub.description}</p>
+                       {sub.link_url && sub.link_url !== 'N/A' && !sub.link_url.includes('Final Deliverables:') && (
+                         <a href={sub.link_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs mt-2 block break-all font-medium">
+                           🔗 Attached Link: {sub.link_url}
+                         </a>
+                       )}
+                     </div>
+                   </div>
+                 );
+               })
+             )}
+           </div>
+         )}
+       </div>
+     )}
+
+     {submissionLogTab === 'tl_to_manager' && (
+       <div className="space-y-4">
+         {myManagerSubmissions.length === 0 ? <p className="text-sm text-[var(--text-secondary)] p-6 linear-card text-center">You have not submitted anything to the manager yet.</p> : (
+           myManagerSubmissions.map(sub => (
+             <div key={sub.id} className="linear-card p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    {sub.submission_type === 'Final Module Submission' ? <CheckCircle className="w-4 h-4 text-purple-500" /> : <FileText className="w-4 h-4 text-amber-500" />}
+                    <span className="font-semibold text-[var(--text-primary)] uppercase text-xs tracking-wider">{sub.submission_type}</span>
+                    <span className="text-xs text-[var(--text-secondary)]">{formatStartedAt(sub.display_date)}</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${sub.status?.includes('Pending') ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : sub.status?.includes('Reject') ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}`}>{sub.status || 'Pending'}</span>
+                </div>
+                
+                {sub.submission_type === 'Daily Update' && <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap mt-2">{sub.summary}</p>}
+                
+                {sub.submission_type === 'Final Module Submission' && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-[var(--text-secondary)]">Module: {projectModules.find(m => m.id === sub.module_id)?.name}</p>
+                    {sub.notes && <p className="text-sm text-[var(--text-primary)] p-3 bg-[var(--surface)] border border-[var(--border)] rounded">{sub.notes}</p>}
+                    <div className="flex gap-4">
+                      {sub.source_code_url && <a href={sub.source_code_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">Code</a>}
+                      {sub.files_url && <a href={sub.files_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">Files</a>}
+                      {sub.live_url && <a href={sub.live_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">Live Demo</a>}
+                    </div>
+                  </div>
+                )}
+                
+                {sub.submission_type === 'Final Project Report' && (
+                  <div className="mt-2">
+                    <p className="text-sm text-[var(--text-secondary)]">Project: {projects?.find(p => p.id === sub.project_id)?.name}</p>
+                    <p className="text-sm text-[var(--text-primary)] mt-1">{sub.project_summary}</p>
+                  </div>
+                )}
+                
+                {sub.manager_feedback && (
+                  <div className="mt-4 p-3 bg-[var(--surface)] border border-brand-500/30 rounded text-sm italic border-l-4 border-l-brand-500">
+                    "{sub.manager_feedback}"
+                  </div>
+                )}
+             </div>
+           ))
+         )}
+       </div>
+     )}
+   </div>
+ )}
+
  {showFinalReportModal && (
  <div className="fixed inset-0 bg-[var(--surface)]/50 flex items-center justify-center p-6 z-50 transition-opacity">
  <div className="linear-card max-w-2xl w-full p-6 overflow-y-auto max-h-[90vh]">
@@ -935,6 +1102,96 @@ export default function TeamLeaderWorkspace() {
  </div>
  </div>
  )}
+  {showModuleSubmitModal && selectedModuleForSubmit && (
+    <div className="fixed inset-0 bg-[var(--surface)]/50 flex items-center justify-center p-6 z-50 transition-opacity">
+      <div className="linear-card max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <h2 className="section-title mb-1 flex items-center gap-2"><CheckCircle className="w-5 h-5 text-green-500" /> Submit Module to Manager</h2>
+        <p className="text-[var(--text-secondary)] text-sm mb-6 font-medium">You are about to submit the completed module <span className="font-semibold text-[var(--text-primary)]">{selectedModuleForSubmit.name}</span>. This will lock all tasks and send a notification to the project manager for final review.</p>
+        
+        <form onSubmit={submitModuleToManager} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Final Submission Notes (Optional)</label>
+            <textarea 
+              className="linear-input min-h-[100px] py-2" 
+              rows="4" 
+              value={moduleSubmitNotes} 
+              onChange={e => setModuleSubmitNotes(e.target.value)} 
+              placeholder="Provide a quick summary of the team's work, what the manager should look out for..." 
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Source Code URL (Optional)</label>
+              <input 
+                type="url" 
+                className="linear-input" 
+                value={moduleSubmitSourceUrl} 
+                onChange={e => setModuleSubmitSourceUrl(e.target.value)} 
+                placeholder="https://github.com/..." 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Files / Drive Link (Optional)</label>
+              <input 
+                type="url" 
+                className="linear-input" 
+                value={moduleSubmitFilesUrl} 
+                onChange={e => setModuleSubmitFilesUrl(e.target.value)} 
+                placeholder="https://drive.google.com/..." 
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Live Demo / Preview URL (Optional)</label>
+            <input 
+              type="url" 
+              className="linear-input" 
+              value={moduleSubmitLiveUrl} 
+              onChange={e => setModuleSubmitLiveUrl(e.target.value)} 
+              placeholder="https://demo.example.com" 
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Testing Details (Optional)</label>
+              <textarea 
+                className="linear-input min-h-[80px] py-2" 
+                value={moduleSubmitTesting} 
+                onChange={e => setModuleSubmitTesting(e.target.value)} 
+                placeholder="How was this module tested?" 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase mb-1">Deployment Details (Optional)</label>
+              <textarea 
+                className="linear-input min-h-[80px] py-2" 
+                value={moduleSubmitDeployment} 
+                onChange={e => setModuleSubmitDeployment(e.target.value)} 
+                placeholder="Any deployment instructions?" 
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-4 border-t border-[var(--border)] mt-6">
+            <button type="button" onClick={() => { 
+              setShowModuleSubmitModal(false); 
+              setModuleSubmitNotes(''); 
+              setModuleSubmitSourceUrl('');
+              setModuleSubmitFilesUrl('');
+              setModuleSubmitLiveUrl('');
+              setModuleSubmitTesting('');
+              setModuleSubmitDeployment('');
+            }} className="px-4 py-2 text-sm text-[var(--text-secondary)] font-medium hover:bg-[var(--surface)] transition-colors duration-150">Cancel</button>
+            <button type="submit" className="px-4 py-2 text-sm bg-[var(--btn-primary-bg)] hover:bg-[var(--btn-primary-hover)] text-[var(--btn-primary-text)] font-semibold transition-colors duration-150 border border-[var(--border)]">Confirm & Submit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
  </div>
  );
 }

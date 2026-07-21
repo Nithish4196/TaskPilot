@@ -24,6 +24,8 @@ import EmployeeFeedback from './pages/EmployeeFeedback';
 import EmployeeRewards from './pages/EmployeeRewards';
 import EmployeeDocuments from './pages/EmployeeDocuments';
 import EmployeeSettings from './pages/EmployeeSettings';
+import EmployeeSubmissionLog from './pages/EmployeeSubmissionLog';
+import ManagerSubmissionLog from './pages/ManagerSubmissionLog';
 import TeamLeaderWorkspace from './pages/TeamLeaderWorkspace';
 import CompletedProjects from './pages/CompletedProjects';
 import ManagerAnalytics from './pages/ManagerAnalytics';
@@ -66,6 +68,7 @@ function App() {
           <Route path="leaderboard" element={<Leaderboard />} />
           <Route path="manager/rewards" element={<ManagerRewards />} />
           <Route path="manager/resources" element={<ManagerResources />} />
+          <Route path="submission-log" element={<ManagerSubmissionLog />} />
           <Route path="reports" element={<ManagerAnalytics />} />
           <Route path="completed-projects" element={<CompletedProjects />} />
         </Route>
@@ -74,7 +77,7 @@ function App() {
         <Route path="/employee" element={<ProtectedRoute allowedRole="employee"><EmployeeLayout /></ProtectedRoute>}>
           <Route path="dashboard" element={<EmployeeDashboard />} />
           <Route path="profile" element={<EmployeeProfile />} />
-          <Route path="tasks" element={<EmployeeTasks />} />
+          <Route path="projects/:projectId" element={<EmployeeTasks />} />
           <Route path="projects" element={<EmployeeProjects />} />
           <Route path="daily-updates" element={<DailyUpdates />} />
           <Route path="calendar" element={<EnterpriseCalendar />} />
@@ -84,7 +87,9 @@ function App() {
           <Route path="rewards" element={<EmployeeRewards />} />
           <Route path="documents" element={<EmployeeDocuments />} />
           <Route path="settings" element={<EmployeeSettings />} />
+          <Route path="submission-log" element={<EmployeeSubmissionLog />} />
           <Route path="team-leader" element={<TeamLeaderWorkspace />} />
+          <Route path="manager-submission-log" element={<ManagerSubmissionLog />} />
           <Route path="team-rewards" element={<TeamLeaderRewards />} />
         </Route>
       </Routes>

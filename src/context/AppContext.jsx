@@ -46,6 +46,7 @@ export const AppProvider = ({ children }) => {
   // Phase 3: Enterprise Workflow State
   const [dailyWorkSubmissions, setDailyWorkSubmissions] = useState([]);
   const [dailyTeamReports, setDailyTeamReports] = useState([]);
+  const [finalTeamReports, setFinalTeamReports] = useState([]);
   const [moduleSubmissions, setModuleSubmissions] = useState([]);
   const [dailyFeedback, setDailyFeedback] = useState([]);
 const [projectRatings, setProjectRatings] = useState([]);
@@ -73,7 +74,7 @@ const [projectRatings, setProjectRatings] = useState([]);
     try {
       const [
         projsRes, tasksRes, rewardsRes, claimsRes, settingsRes, teamsRes, modulesRes, updatesRes, subsRes, deliverableRes, historyRes, notifRes,
-        workSubsRes, teamReportsRes, modSubsRes, feedbackRes, ratingsRes, remindersRes,
+        workSubsRes, teamReportsRes, finalTeamReportsRes, modSubsRes, feedbackRes, ratingsRes, remindersRes,
         entRewardsRes, entClaimsRes, entAuditRes
       ] = await Promise.all([
         supabase.from('projects').select('*').order('created_at', { ascending: false }),
@@ -89,7 +90,8 @@ const [projectRatings, setProjectRatings] = useState([]);
         supabase.from('task_history').select('*').order('timestamp', { ascending: false }),
         supabase.from('notifications').select('*').order('created_at', { ascending: false }),
         supabase.from('daily_work_submissions').select('*').order('submitted_at', { ascending: false }),
-        supabase.from('daily_team_reports').select('*').order('created_at', { ascending: false }),
+        supabase.from('daily_team_reports').select('*').order('report_date', { ascending: false }),
+        supabase.from('final_team_reports').select('*').order('submitted_at', { ascending: false }),
         supabase.from('module_submissions').select('*').order('submitted_at', { ascending: false }),
         supabase.from('daily_feedback').select('*').order('created_at', { ascending: false }),
         supabase.from('project_ratings').select('*').order('created_at', { ascending: false }),
@@ -112,6 +114,7 @@ const [projectRatings, setProjectRatings] = useState([]);
       if (notifRes && notifRes.data) setNotifications(notifRes.data);
       if (workSubsRes && workSubsRes.data) setDailyWorkSubmissions(workSubsRes.data);
       if (teamReportsRes && teamReportsRes.data) setDailyTeamReports(teamReportsRes.data);
+      if (finalTeamReportsRes && finalTeamReportsRes.data) setFinalTeamReports(finalTeamReportsRes.data);
       if (modSubsRes && modSubsRes.data) setModuleSubmissions(modSubsRes.data);
       if (feedbackRes && feedbackRes.data) setDailyFeedback(feedbackRes.data);
       if (ratingsRes && ratingsRes.data) setProjectRatings(ratingsRes.data);
@@ -145,6 +148,7 @@ const [projectRatings, setProjectRatings] = useState([]);
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_work_submissions' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_team_reports' }, () => fetchGlobalData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'final_team_reports' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'module_submissions' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_feedback' }, () => fetchGlobalData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_ratings' }, () => fetchGlobalData())
@@ -186,18 +190,20 @@ const [projectRatings, setProjectRatings] = useState([]);
 
 
 
-  const triggerNotification = async (recipientId, title, message, type, referenceId) => {
+  const triggerNotification = async (recipientId, title, message, type, referenceId, priority = 'Medium', category = 'System') => {
     try {
       if (!recipientId) return;
-      // Disabled temporarily to prevent 401 network errors
-      // const { error } = await supabase.from('notifications').insert({
-      //   recipient_id: recipientId,
-      //   title,
-      //   message,
-      //   type,
-      //   reference_id: referenceId
-      // });
-      // if (error) console.error("Error creating notification:", error);
+      const { notificationService } = await import('../services/notificationService');
+      await notificationService.publishEvent({
+        sender_id: currentUser?.id,
+        receiver_id: recipientId,
+        title,
+        description: message,
+        event_type: type,
+        priority,
+        category,
+        action_url: `/dashboard`
+      });
     } catch (err) {
       console.error("Exception creating notification:", err);
     }
@@ -622,13 +628,20 @@ const [projectRatings, setProjectRatings] = useState([]);
       taskDeliverables,
       taskHistory,
       notifications,
+      
       dailyWorkSubmissions,
       dailyTeamReports,
+      finalTeamReports,
       moduleSubmissions,
       dailyFeedback,
       projectRatings,
       reminders,
       setReminders,
+      
+      enterpriseRewards,
+      enterpriseRewardClaims,
+      enterpriseRewardAuditLog,
+
       fetchGlobalData,
       triggerNotification,
       fetchEmployees, // export if manual refresh is ever needed

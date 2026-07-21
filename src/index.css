@@ -24,8 +24,8 @@
 
   /* Typography System */
   h1, .page-title { @apply text-[32px] font-[700] text-[var(--text-primary)] tracking-tight leading-tight; }
-  h2, .section-title { @apply text-[22px] font-[600] text-[var(--text-primary)] tracking-tight leading-snug; }
-  h3, .card-title { @apply text-[18px] font-[600] text-[var(--text-primary)] tracking-tight; }
+  h2, .section-title { @apply text-[22px] font-bold text-[var(--text-primary)] tracking-tight leading-snug; }
+  h3, .card-title { @apply text-[18px] font-bold text-[var(--text-primary)] tracking-tight; }
   p, .body-text { @apply text-[15px] font-[400] text-[var(--text-primary)] leading-relaxed; }
   .caption-text { @apply text-[13px] font-[500] text-[var(--text-secondary)]; }
 }

@@ -4,6 +4,7 @@ import {
  Calendar as CalendarIcon, Bell, Award, FileStack, Settings, LogOut, Briefcase, User, Activity, Archive, Moon, Sun, Crown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { NotificationBell } from './NotificationBell';
 
 const EmployeeLayout = () => {
  const location = useLocation();
@@ -14,12 +15,10 @@ const EmployeeLayout = () => {
 
  const navItems = [
  { name: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
- { name: 'My Tasks', path: '/employee/tasks', icon: CheckSquare },
  { name: 'My Projects', path: '/employee/projects', icon: Folders },
  { name: 'Calendar', path: '/employee/calendar', icon: CalendarIcon },
  { name: 'Notifications', path: '/employee/notifications', icon: Bell },
  { name: 'Performance', path: '/employee/performance', icon: Activity },
- { name: 'Feedback', path: '/employee/feedback', icon: Award },
  { name: 'Rewards', path: '/employee/rewards', icon: Award },
  { name: 'Documents', path: '/employee/documents', icon: FileStack },
  ];
@@ -41,8 +40,8 @@ const EmployeeLayout = () => {
  <div className="ml-auto text-[10px] font-semibold px-2 py-0.5 border border-[var(--border)] text-[var(--text-primary)] uppercase tracking-wider rounded">Employee</div>
  </div>
  <nav className="p-4 space-y-1">
- <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3 mt-2">Work</div>
- {navItems.slice(0, 4).map((item) => {
+ <div className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3 mt-2">Work</div>
+ {navItems.slice(0, 5).map((item) => {
  const isActive = location.pathname.startsWith(item.path);
  const Icon = item.icon;
  return (
@@ -62,7 +61,7 @@ const EmployeeLayout = () => {
 
  {isLeader && (
  <>
- <div className="text-[10px] font-semibold text-[var(--text-primary)] uppercase tracking-wider mb-4 px-3 mt-6">Team Leader</div>
+ <div className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3 mt-6">Team Leader</div>
  <Link
  to="/employee/team-leader"
  className={`flex items-center gap-3 px-3 h-[44px] text-[15px] rounded-[10px] transition-colors duration-150 ${location.pathname.startsWith('/employee/team-leader')
@@ -73,32 +72,13 @@ const EmployeeLayout = () => {
  <Briefcase className={`w-[18px] h-[18px] ${location.pathname.startsWith('/employee/team-leader') ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname.startsWith('/employee/team-leader') ? 2.5 : 2} />
  Task Management
  </Link>
- <Link
- to="/employee/calendar"
- className={`flex items-center gap-3 px-3 h-[44px] text-[15px] rounded-[10px] transition-colors duration-150 ${location.pathname === '/employee/calendar'
- ? 'bg-[#111111] text-[#FFFFFF] font-[500]'
- : 'text-[var(--text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--text-primary)]'
- }`}
- >
- <CalendarIcon className={`w-[18px] h-[18px] ${location.pathname === '/employee/calendar' ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname === '/employee/calendar' ? 2.5 : 2} />
- Calendar
- </Link>
- <Link
- to="/employee/team-rewards"
- className={`flex items-center gap-3 px-3 h-[44px] text-[15px] rounded-[10px] transition-colors duration-150 ${location.pathname.startsWith('/employee/team-rewards')
- ? 'bg-[#111111] text-[#FFFFFF] font-[500]'
- : 'text-[var(--text-secondary)] hover:bg-[#F5F5F5] hover:text-[var(--text-primary)]'
- }`}
- >
- <Crown className={`w-[18px] h-[18px] ${location.pathname.startsWith('/employee/team-rewards') ? 'text-[#FFFFFF]' : 'text-[var(--text-secondary)] opacity-80'}`} strokeWidth={location.pathname.startsWith('/employee/team-rewards') ? 2.5 : 2} />
- Team Rewards
- </Link>
+ 
 
  </>
  )}
 
- <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3 mt-6">Overview & Settings</div>
- {navItems.slice(4).map((item) => {
+ <div className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3 mt-6">Overview & Settings</div>
+ {navItems.slice(5).map((item) => {
  const isActive = location.pathname.startsWith(item.path);
  const Icon = item.icon;
  return (
@@ -119,6 +99,10 @@ const EmployeeLayout = () => {
  </div>
 
  <div className="p-4 border-t border-[var(--border)] shrink-0 bg-[var(--surface)] space-y-1 transition-colors duration-150">
+ <div className="flex items-center justify-between mb-2 px-2">
+   <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase">Account</h4>
+   <NotificationBell />
+ </div>
  <Link to="/employee/profile" className="my-2 px-3 flex items-center gap-3 hover:bg-[#F5F5F5] rounded-[10px] cursor-pointer transition-colors duration-150 h-[52px]">
  <div className="w-8 h-8 rounded border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-primary)] text-sm shrink-0">
  {currentUser?.name ? currentUser.name.charAt(0) : 'E'}
@@ -148,7 +132,10 @@ const EmployeeLayout = () => {
  <div className="flex items-center gap-2 text-[var(--text-primary)]">
  <span className="card-title">Taskpilot</span>
  </div>
- <button onClick={handleLogout} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><LogOut className="w-4 h-4" /></button>
+ <div className="flex items-center gap-2">
+   <NotificationBell />
+   <button onClick={handleLogout} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><LogOut className="w-4 h-4" /></button>
+ </div>
  </header>
 
  <div className="flex-1 overflow-y-auto">

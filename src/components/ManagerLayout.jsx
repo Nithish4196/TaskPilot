@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Calendar as CalendarIcon, UserPlus, Settings, LogOut, Gift, BarChart3, Archive, Trophy, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar as CalendarIcon, UserPlus, Settings, LogOut, Gift, BarChart3, Archive, Trophy, Moon, Sun, FileText } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { NotificationBell } from './NotificationBell';
 
 const ManagerLayout = () => {
  const location = useLocation();
@@ -11,6 +12,7 @@ const ManagerLayout = () => {
  { name: 'Dashboard', path: '/', icon: LayoutDashboard },
  { name: 'Employees', path: '/employees', icon: Users },
  { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
+ { name: 'Submission Log', path: '/submission-log', icon: FileText },
   { name: 'Reports & Analytics', path: '/reports', icon: BarChart3 },
  { name: 'Completed Projects', path: '/completed-projects', icon: Archive },
  { name: 'Leaderboard', path: '/leaderboard', icon: Trophy },
@@ -31,10 +33,10 @@ const ManagerLayout = () => {
  <div className="flex items-center gap-2 text-[var(--text-primary)]">
  <span className="text-xl font-bold tracking-tight text-[var(--text-primary)]">Taskpilot</span>
  </div>
- <div className="ml-auto text-[10px] font-semibold px-2 py-0.5 border border-[var(--border)] text-[var(--text-primary)] uppercase tracking-wider rounded">Manager</div>
+ <div className="ml-auto text-[10px] font-bold px-2 py-0.5 border border-[var(--border)] text-[var(--text-primary)] uppercase tracking-wider rounded">Manager</div>
  </div>
  <nav className="p-4 space-y-1">
- <div className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3">Main Menu</div>
+ <div className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider mb-4 px-3">Main Menu</div>
  {navItems.map((item) => {
  const isActive = location.pathname === item.path || (item.path === '/employees' && location.pathname === '/add-employee');
  const Icon = item.icon;
@@ -56,6 +58,10 @@ const ManagerLayout = () => {
  </nav>
  </div>
  <div className="p-4 border-t border-[var(--border)] space-y-1">
+ <div className="flex items-center justify-between mb-2 px-2">
+   <h4 className="text-xs font-bold text-[var(--text-secondary)] uppercase">Account</h4>
+   <NotificationBell />
+ </div>
  <div className="my-2 px-3 flex items-center gap-3">
  <div className="w-8 h-8 rounded border border-[var(--border)] flex items-center justify-center font-semibold text-[var(--text-primary)] text-sm">
  {currentUser?.name ? currentUser.name.charAt(0) : 'A'}
@@ -85,6 +91,7 @@ const ManagerLayout = () => {
  <div className="flex items-center gap-2 text-[var(--text-primary)]">
  <span className="card-title">Taskpilot</span>
  </div>
+ <NotificationBell />
  </header>
 
  {/* Scrollable Page Content */}
