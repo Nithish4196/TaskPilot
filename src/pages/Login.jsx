@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, KeyRound, Mail, ArrowRight, ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
+import { Briefcase, KeyRound, Mail, ArrowRight, ShieldCheck, Loader2, AlertCircle, ClipboardList, TrendingUp, BellRing, BarChart } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
 
 export default function Login() {
@@ -118,26 +118,83 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="Taskpilot Logo" className="h-24 w-auto object-contain" />
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Left Column (Branding & Features) */}
+      <div className="hidden md:flex md:w-1/2 bg-white flex-col justify-center px-12 lg:px-24">
+        <div className="max-w-md w-full">
+          <img src="/logo2.png" alt="TaskPilot Logo" className="w-64 h-auto mb-2 object-contain" />
+          
+          <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight mb-4">
+            Your Intelligent Task Manager.
+          </h1>
+          <p className="text-lg text-slate-600 mb-12">
+            Streamline workflows, manage teams, assign modules, and track progress effortlessly.
+          </p>
+
+          <div className="space-y-8">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-slate-100 rounded-lg shrink-0">
+                <ClipboardList className="w-6 h-6 text-slate-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Smart Task Delegation</h3>
+                <p className="text-sm text-slate-500 mt-1">Assign tasks and modules seamlessly across teams.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-slate-100 rounded-lg shrink-0">
+                <TrendingUp className="w-6 h-6 text-slate-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Real-time Progress Tracking</h3>
+                <p className="text-sm text-slate-500 mt-1">Monitor team bandwidth and project status instantly.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-slate-100 rounded-lg shrink-0">
+                <BellRing className="w-6 h-6 text-slate-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Automated Notifications</h3>
+                <p className="text-sm text-slate-500 mt-1">Keep everyone in the loop with instant updates.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-slate-100 rounded-lg shrink-0">
+                <BarChart className="w-6 h-6 text-slate-700" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Manager Analytics</h3>
+                <p className="text-sm text-slate-500 mt-1">Evaluate performance and manage team capacity.</p>
+              </div>
+            </div>
+          </div>
         </div>
-        <h2 className="text-center text-3xl font-extrabold text-[var(--text-primary)]">
-          {requiresReset ? "Secure Your Account" : "Sign in to Taskpilot"}
-        </h2>
-        <p className="mt-2 text-center text-sm text-[var(--text-secondary)]">
-          {requiresReset ? "Please change your temporary password to continue." : "Enter your credentials to access your dashboard."}
-        </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md animate-in fade-in slide-in-from-bottom-2 duration-150">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-[var(--border)]">
-          
+      {/* Right Column (Login Form) */}
+      <div className="w-full md:w-1/2 bg-black text-white flex flex-col justify-center px-6 py-12 sm:px-12 lg:px-24">
+        
+        {/* Mobile Logo Fallback */}
+        <div className="md:hidden flex justify-center mb-10">
+          <img src="/logo2.png" alt="TaskPilot Logo" className="w-48 h-auto object-contain brightness-0 invert" />
+        </div>
+
+        <div className="w-full max-w-sm mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 className="text-3xl font-bold text-white mb-2">
+            {requiresReset ? "Secure Account" : "Welcome back"}
+          </h2>
+          <p className="text-sm text-gray-400 mb-8">
+            {requiresReset ? "Please create a new password to continue." : "Sign in to your TaskPilot account."}
+          </p>
+
           <form className="space-y-6" onSubmit={requiresReset ? handleResetPassword : handleLogin}>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm p-3 flex items-center gap-2 rounded">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="bg-red-950/50 border border-red-500/50 text-red-200 text-sm p-4 flex items-center gap-3 rounded-lg">
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-400" />
                 {error}
               </div>
             )}
@@ -145,16 +202,16 @@ export default function Login() {
             {!requiresReset ? (
               <>
                 <div>
-                  <label className="block text-sm font-bold text-[var(--text-primary)]">Email Address</label>
-                  <div className="mt-1 relative">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Email</label>
+                  <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-[var(--text-secondary)]" />
+                      <Mail className="h-5 w-5 text-gray-500" />
                     </div>
                     <input
                       type="email"
                       required
-                      className="linear-input pl-10"
-                      placeholder="Enter your email"
+                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:bg-white/10 focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none"
+                      placeholder="you@example.com"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                     />
@@ -162,74 +219,73 @@ export default function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-[var(--text-primary)]">Password</label>
-                  <div className="mt-1 relative">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">Password</label>
+                  <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <KeyRound className="h-5 w-5 text-[var(--text-secondary)]" />
+                      <KeyRound className="h-5 w-5 text-gray-500" />
                     </div>
                     <input
                       type="password"
                       required
-                      className="linear-input pl-10"
-                      placeholder="••••••••"
+                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:bg-white/10 focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none"
+                      placeholder="Enter your password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-2">
                   <div className="flex items-center">
-                    <input id="remember-me" name="remember-me" type="checkbox" className="h-4 w-4 text-[var(--text-primary)] focus:ring-[var(--ring-focus)] border-gray-300 rounded" />
-                    <label htmlFor="remember-me" className="ml-2 block text-sm text-[var(--text-secondary)]"> Remember me </label>
+                    <input id="remember-me" name="remember-me" type="checkbox" className="h-4 w-4 bg-transparent border-gray-500 rounded focus:ring-0 checked:bg-white checked:border-white transition-colors" />
+                    <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-gray-400"> Remember me </label>
                   </div>
                   <div className="text-sm">
-                    <a href="#" className="font-medium text-[var(--text-primary)] hover:underline"> Forgot password? </a>
+                    <a href="#" className="font-semibold text-white hover:text-gray-300 transition-colors"> Forgot password? </a>
                   </div>
                 </div>
               </>
             ) : (
               <>
                 <div>
-                  <label className="block text-sm font-bold text-[var(--text-primary)]">New Secure Password</label>
-                  <div className="mt-1 relative">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2">New Secure Password</label>
+                  <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <ShieldCheck className="h-5 w-5 text-[var(--text-secondary)]" />
+                      <ShieldCheck className="h-5 w-5 text-gray-500" />
                     </div>
                     <input
                       type="password"
                       required
                       minLength="8"
-                      className="linear-input pl-10"
+                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:bg-white/10 focus:border-white/20 focus:ring-1 focus:ring-white/20 transition-all outline-none"
                       placeholder="Minimum 8 characters"
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                     />
                   </div>
-                  <p className="text-[10px] text-[var(--text-secondary)] mt-2">
+                  <p className="text-xs text-gray-500 mt-3 leading-relaxed">
                     For your security, you must replace the temporary password provided by your manager before accessing the dashboard.
                   </p>
                 </div>
               </>
             )}
 
-            <div>
+            <div className="pt-4">
               <button
                 type="submit"
                 disabled={isLoading}
-                className="btn-primary w-full flex justify-center py-2.5"
+                className="w-full flex justify-center items-center py-3.5 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {requiresReset ? "Update Password & Login" : "Sign In"} <ArrowRight className="w-4 h-4 ml-2" />
+                    {requiresReset ? "Update & Login" : "Sign In"}
                   </>
                 )}
               </button>
             </div>
           </form>
-
         </div>
       </div>
     </div>
