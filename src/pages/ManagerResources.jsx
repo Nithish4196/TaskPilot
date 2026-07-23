@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Search, Users, Activity, BarChart3, Briefcase, Calendar, AlertTriangle } from 'lucide-react';
+import { Search, Users, Activity, BarChart3, Briefcase, Calendar, AlertTriangle, Trash2 } from 'lucide-react';
 
 export default function ManagerResources() {
- const { employees, getEmployeeWorkload, getEmployeeActiveProjects, getEmployeeAvailabilityStatus, projects, tasks } = useAppContext();
+ const { employees, getEmployeeWorkload, getEmployeeActiveProjects, getEmployeeAvailabilityStatus, projects, tasks, fetchGlobalData } = useAppContext();
  
  const [searchQuery, setSearchQuery] = useState('');
  const [deptFilter, setDeptFilter] = useState('');
@@ -51,6 +51,21 @@ export default function ManagerResources() {
  const totalEmployees = resourceData.length;
  const availableCount = resourceData.filter(r => r.status === 'Available').length;
  const fullCapacityCount = resourceData.filter(r => r.status === 'Full Capacity').length;
+
+ const handleDeactivate = async (empId, empName) => {
+   if (!window.confirm(`Are you sure you want to deactivate ${empName}?\nThey will immediately lose access to the portal.`)) return;
+   try {
+     const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+     const response = await fetch(`${API_URL}/api/employees/${empId}`, { method: 'DELETE' });
+     const data = await response.json();
+     if (!response.ok) throw new Error(data.error);
+     
+     // Refresh global data
+     fetchGlobalData();
+   } catch (err) {
+     alert(`Error deactivating employee: ${err.message}`);
+   }
+ };
 
  return (
  <div className="max-w-7xl mx-auto pb-24 animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -114,6 +129,7 @@ export default function ManagerResources() {
  <th className="p-6 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Workload</th>
  <th className="p-6 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Projects / Tasks</th>
  <th className="p-6 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">Cross-Dept Assignments</th>
+ <th className="p-6 text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider text-right">Actions</th>
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100">
@@ -171,6 +187,15 @@ export default function ManagerResources() {
  ) : (
  <span className="text-xs text-[var(--text-secondary)] italic">None</span>
  )}
+ </td>
+ <td className="p-6 text-right">
+   <button 
+     onClick={() => handleDeactivate(emp.id, emp.name)}
+     className="text-red-500 hover:text-red-700 p-2 rounded hover:bg-red-50 transition-colors"
+     title="Deactivate Employee"
+   >
+     <Trash2 className="w-5 h-5" />
+   </button>
  </td>
  </tr>
  );

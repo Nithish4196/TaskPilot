@@ -14,6 +14,7 @@ const AddEmployee = () => {
  const [formData, setFormData] = useState({
  name: '',
  email: '',
+ password: '',
  mobile: '',
  skills: '',
  projects: '',
@@ -50,20 +51,41 @@ const AddEmployee = () => {
  }, 2000);
  };
 
- const handleSubmit = (e) => {
+ const handleSubmit = async (e) => {
  e.preventDefault();
  
- // Convert skills to array if it's a comma separated string
+ if (formData.password.length < 8) {
+ alert("Password must be at least 8 characters.");
+ return;
+ }
+ 
  const processedData = {
  ...formData,
- skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean)
+ skills: formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+ orgAssignment: {
+ department: formData.department,
+ designation: formData.role,
+ institution: 'TaskPilot',
+ }
  };
  
- const empId = addEmployee(processedData);
+ try {
+ const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+ const response = await fetch(`${API_URL}/api/employees/create`, {
+ method: 'POST',
+ headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify(processedData)
+ });
  
- // Simulate sending email and then redirect to employees list
- console.log(`Invite sent successfully for ${empId}`);
- navigate('/employees');
+ const data = await response.json();
+ if (!response.ok) throw new Error(data.error || 'Failed to create employee');
+ 
+ console.log(`Employee created successfully: ${data.employeeId}`);
+ navigate('/manager/resources');
+ } catch (err) {
+ console.error(err);
+ alert(err.message);
+ }
  };
 
  if (!mode && !isParsing) {
@@ -171,6 +193,10 @@ const AddEmployee = () => {
  <div className="space-y-2">
  <label className="block text-sm font-bold text-[var(--text-primary)]">Email Address</label>
  <input type="email" required className="linear-input" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+ </div>
+ <div className="space-y-2">
+ <label className="block text-sm font-bold text-[var(--text-primary)]">Temporary Password</label>
+ <input type="text" required minLength="8" className="linear-input" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Min 8 characters" />
  </div>
  <div className="space-y-2">
  <label className="block text-sm font-bold text-[var(--text-primary)]">Mobile Number</label>

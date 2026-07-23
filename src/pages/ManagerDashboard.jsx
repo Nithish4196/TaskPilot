@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, ExternalLink, FolderKanban, Users, Activity, CheckCircle2, Calendar, LayoutGrid, AlertTriangle, FileText, Send, Star, Target } from 'lucide-react';
+import { Plus, ExternalLink, FolderKanban, Users, Activity, CheckCircle2, Calendar, LayoutGrid, AlertTriangle, FileText, Send, Star, Target, Edit3, Trash2, X, Loader2 } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
 import TodaysScheduleWidget from '../components/TodaysScheduleWidget';
 
 const ManagerDashboard = () => {
  const navigate = useNavigate();
- const { currentUser, projects, employees, tasks, projectModules, dailyTeamReports, moduleSubmissions, projectTeams, fetchGlobalData, triggerNotification, taskDeliverables } = useAppContext();
+ const { currentUser, projects, employees, tasks, projectModules, dailyTeamReports, moduleSubmissions, projectTeams, fetchGlobalData, triggerNotification, taskDeliverables, updateProject, deleteProject } = useAppContext();
  
  const [activeTab, setActiveTab] = useState('overview'); // overview, reports, modules
+ 
+ const [editingProject, setEditingProject] = useState(null);
+ const [isSubmitting, setIsSubmitting] = useState(false);
 
  const activeProjects = projects.filter(p => p.status === 'Active');
  const avgCompletion = projects.length > 0 
@@ -171,7 +174,18 @@ const ManagerDashboard = () => {
  ) : (
  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
  {activeProjects.map(project => (
- <ProjectCard key={project.id} project={project} employees={employees} tasks={tasks} />
+ <ProjectCard 
+   key={project.id} 
+   project={project} 
+   employees={employees} 
+   tasks={tasks} 
+   onEdit={() => setEditingProject(project)}
+   onDelete={async () => {
+     if(window.confirm(`WARNING: Are you sure you want to completely delete "${project.name}"?\nThis will erase all teams, modules, and tasks associated with it. This action cannot be undone.`)) {
+       await deleteProject(project.id);
+     }
+   }}
+ />
  ))}
  </div>
  )}
@@ -357,6 +371,92 @@ const ManagerDashboard = () => {
  </div>
  </div>
  )}
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border)]">
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">Edit Project</h3>
+              <button onClick={() => setEditingProject(null)} className="text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] p-2 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmitting(true);
+              const success = await updateProject(editingProject.id, {
+                name: editingProject.name,
+                description: editingProject.description,
+                start_date: editingProject.start_date,
+                end_date: editingProject.end_date,
+                status: editingProject.status
+              });
+              setIsSubmitting(false);
+              if (success) setEditingProject(null);
+            }} className="p-6 space-y-6">
+              
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--text-primary)]">Project Name</label>
+                <input 
+                  type="text" required className="linear-input" 
+                  value={editingProject.name} 
+                  onChange={e => setEditingProject({...editingProject, name: e.target.value})} 
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--text-primary)]">Description</label>
+                <textarea 
+                  required className="linear-input min-h-[100px]" 
+                  value={editingProject.description} 
+                  onChange={e => setEditingProject({...editingProject, description: e.target.value})} 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--text-primary)]">Start Date</label>
+                  <input 
+                    type="date" required className="linear-input" 
+                    value={editingProject.start_date ? editingProject.start_date.split('T')[0] : ''} 
+                    onChange={e => setEditingProject({...editingProject, start_date: e.target.value})} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--text-primary)]">End Date</label>
+                  <input 
+                    type="date" className="linear-input" 
+                    value={editingProject.end_date ? editingProject.end_date.split('T')[0] : ''} 
+                    onChange={e => setEditingProject({...editingProject, end_date: e.target.value})} 
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--text-primary)]">Status</label>
+                <select 
+                  className="linear-input" 
+                  value={editingProject.status} 
+                  onChange={e => setEditingProject({...editingProject, status: e.target.value})}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Completed">Completed</option>
+                  <option value="On Hold">On Hold</option>
+                </select>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setEditingProject(null)} className="btn-secondary">Cancel</button>
+                <button type="submit" disabled={isSubmitting} className="btn-primary flex items-center gap-2">
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
  </div>
  );
 };
@@ -377,7 +477,7 @@ const StatCard = ({ title, value, icon: Icon, color }) => {
  );
 };
 
-const ProjectCard = ({ project, employees, tasks }) => {
+const ProjectCard = ({ project, employees, tasks, onEdit, onDelete }) => {
  const { projectModules } = useAppContext();
  const projectTasks = tasks.filter(t => t.project_id === project.id);
  const projModules = projectModules.filter(m => m.project_id === project.id);
@@ -393,10 +493,23 @@ const ProjectCard = ({ project, employees, tasks }) => {
  <div className="absolute top-0 left-0 w-full h-1 bg-[var(--bg-secondary)]0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
  
  <div className="flex justify-between items-start mb-6">
- <h3 className="text-base font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-primary)] transition-colors line-clamp-1">{project.name}</h3>
- <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-[var(--bg-secondary)] text-[var(--text-secondary)] border border-[var(--border)]">
- {project.status}
- </span>
+ <h3 className="text-base font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-primary)] transition-colors line-clamp-1 pr-16">{project.name}</h3>
+ <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+   <button 
+     onClick={(e) => { e.preventDefault(); onEdit(); }}
+     className="p-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-secondary)] hover:text-blue-600 hover:border-blue-200 shadow-sm"
+     title="Edit Project"
+   >
+     <Edit3 className="w-3.5 h-3.5" />
+   </button>
+   <button 
+     onClick={(e) => { e.preventDefault(); onDelete(); }}
+     className="p-1.5 bg-white border border-[var(--border)] rounded text-[var(--text-secondary)] hover:text-red-600 hover:border-red-200 shadow-sm"
+     title="Delete Project"
+   >
+     <Trash2 className="w-3.5 h-3.5" />
+   </button>
+ </div>
  </div>
  
  <p className="text-sm text-[var(--text-secondary)] mb-6 line-clamp-2 flex-grow">

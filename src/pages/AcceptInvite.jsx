@@ -21,7 +21,8 @@ const AcceptInvite = () => {
  useEffect(() => {
  const validateToken = async () => {
  try {
- const response = await fetch(`http://localhost:5000/api/employees/validate-invite/${token}`);
+ const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+ const response = await fetch(`${API_URL}/api/employees/validate-invite/${token}`);
  const data = await response.json();
 
  if (!response.ok) {
@@ -62,7 +63,8 @@ const AcceptInvite = () => {
  setIsSubmitting(true);
 
  try {
- const response = await fetch('http://localhost:5000/api/employees/activate', {
+ const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+ const response = await fetch(`${API_URL}/api/employees/activate`, {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({ token, password })

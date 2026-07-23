@@ -3,13 +3,13 @@ import { useParams, Link, Navigate } from 'react-router-dom';
 import { 
  ArrowLeft, LayoutGrid, Users, Plus, CheckCircle2, AlertCircle, 
  BarChart3, Activity, Clock, Award, ShieldCheck, Mail, Building2, 
- Settings, Target, ChevronDown, ChevronRight, MessageSquare, Briefcase, Calendar, ListTodo, Flag, FileText, Star
+ Settings, Target, ChevronDown, ChevronRight, MessageSquare, Briefcase, Calendar, ListTodo, Flag, FileText, Star, Trash2
 } from 'lucide-react';
 import { useAppContext, supabase } from '../context/AppContext';
 
 export default function ProjectDetail() {
  const { projectId } = useParams();
- const { projects, employees, projectTeams, projectModules, tasks, dailyUpdates, teamRewards, getEmployeeWorkload } = useAppContext();
+ const { projects, employees, projectTeams, projectModules, tasks, dailyUpdates, teamRewards, getEmployeeWorkload, userRole, removeEmployeeFromTeam } = useAppContext();
  
  const project = projects.find(p => p.id === projectId);
  
@@ -353,11 +353,24 @@ export default function ProjectDetail() {
  </p>
  <div className="flex flex-wrap gap-2">
  {members.length > 0 ? members.map(m => (
- <div key={m.id} className="flex items-center gap-2 linear-card px-2 py-1">
+ <div key={m.id} className="flex items-center gap-2 linear-card px-2 py-1 pr-1 group">
  <div className="w-5 h-5 rounded-full bg-[var(--surface-hover)] text-[var(--text-secondary)] flex items-center justify-center font-semibold text-[10px]">
  {m.name.charAt(0)}
  </div>
- <span className="text-xs font-medium text-[var(--text-primary)]">{m.name}</span>
+ <span className="text-xs font-medium text-[var(--text-primary)] pr-2">{m.name}</span>
+ {userRole === 'manager' && (
+   <button 
+     onClick={async () => {
+       if (window.confirm(`Remove ${m.name} from team ${team.team_name}?`)) {
+         await removeEmployeeFromTeam(team.id, m.id);
+       }
+     }}
+     className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+     title="Remove from Team"
+   >
+     <Trash2 className="w-3 h-3" />
+   </button>
+ )}
  </div>
  )) : <span className="text-sm text-[var(--text-secondary)] italic">No members assigned</span>}
  </div>

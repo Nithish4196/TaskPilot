@@ -476,6 +476,34 @@ const [projectRatings, setProjectRatings] = useState([]);
           
           if (teamError) throw teamError;
           teamIdMap[team.id] = teamData.id;
+
+          // Notify Team Leader
+          if (team.team_leader_id) {
+            triggerNotification(
+              team.team_leader_id,
+              'New Project Assigned!',
+              `You have been assigned as the Team Leader for ${team.name} on project ${projPayload.name}`,
+              'assignment',
+              newProjectId,
+              'High',
+              'Project'
+            );
+          }
+
+          // Notify Team Members
+          if (team.team_members && team.team_members.length > 0) {
+            team.team_members.forEach(memberId => {
+              triggerNotification(
+                memberId,
+                'New Project Assigned!',
+                `You have been assigned to team ${team.name} on project ${projPayload.name}`,
+                'assignment',
+                newProjectId,
+                'Medium',
+                'Project'
+              );
+            });
+          }
         }
       }
 
@@ -506,6 +534,76 @@ const [projectRatings, setProjectRatings] = useState([]);
         await supabase.from('projects').delete().eq('id', newProjectId);
       }
       return null;
+    }
+  };
+
+  const updateProject = async (projectId, updates) => {
+    try {
+      const { error } = await supabase.from('projects').update(updates).eq('id', projectId);
+      if (error) throw error;
+      fetchGlobalData();
+      return true;
+    } catch (err) {
+      console.error('Error updating project:', err);
+      alert(`Error updating project: ${err.message}`);
+      return false;
+    }
+  };
+
+  const deleteProject = async (projectId) => {
+    try {
+      // Manual cascade just in case DB constraints aren't set to CASCADE
+      // 1. Delete tasks
+      await supabase.from('tasks').delete().eq('project_id', projectId);
+      // 2. Delete modules
+      await supabase.from('project_modules').delete().eq('project_id', projectId);
+      // 3. Delete teams
+      await supabase.from('project_teams').delete().eq('project_id', projectId);
+      // 4. Delete rewards
+      await supabase.from('enterprise_rewards').delete().eq('project_id', projectId);
+      
+      // 5. Delete project
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      if (error) throw error;
+      
+      fetchGlobalData();
+      return true;
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      alert(`Error deleting project: ${err.message}`);
+      return false;
+    }
+  };
+
+  const removeEmployeeFromTeam = async (teamId, employeeId) => {
+    try {
+      // Get the current team
+      const { data: team, error: fetchError } = await supabase
+        .from('project_teams')
+        .select('team_members')
+        .eq('id', teamId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Filter out the employee
+      const currentMembers = team.team_members || [];
+      const updatedMembers = currentMembers.filter(id => id !== employeeId);
+      
+      // Update the team
+      const { error: updateError } = await supabase
+        .from('project_teams')
+        .update({ team_members: updatedMembers })
+        .eq('id', teamId);
+        
+      if (updateError) throw updateError;
+      
+      fetchGlobalData();
+      return true;
+    } catch (err) {
+      console.error('Error removing employee from team:', err);
+      alert(`Error removing employee: ${err.message}`);
+      return false;
     }
   };
 
@@ -615,6 +713,9 @@ const [projectRatings, setProjectRatings] = useState([]);
       rewardClaims,
       rewardSettings,
       addProject,
+      updateProject,
+      deleteProject,
+      removeEmployeeFromTeam,
       createFullProjectTransaction,
       addModules,
       evaluateTeamReward,

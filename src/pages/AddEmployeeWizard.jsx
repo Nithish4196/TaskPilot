@@ -111,7 +111,8 @@ export default function AddEmployeeWizard() {
  };
  
  try {
- const response = await fetch('http://localhost:5000/api/employees/invite', {
+ const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+ const response = await fetch(`${API_URL}/api/employees/invite`, {
  method: 'POST',
  headers: {
  'Content-Type': 'application/json',
